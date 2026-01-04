@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# nft-proxy
 
-## Getting Started
+Developer-friendly endpoints to fetch **NFT metadata** and **images** without worrying about IPFS, CORS, remote domains, or flaky RPCs.
 
-First, run the development server:
+It:
+- resolves `tokenURI()` / `uri()` (ERC-721 + ERC-1155)
+- follows IPFS URLs
+- serves images as-is (SVG/GIF/etc) or as **optimized WebP** (optional resize)
+
+## Quickstart (local)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Endpoints (HTTP)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Metadata**
+  - `GET /:contract/:tokenId/metadata`
+  - Returns: JSON (includes resolved `metadataUrl`, parsed `metadata`, and `imageUrl` when available)
+  - Query:
+    - `rpcUrl`: override the Ethereum RPC URL (optional)
+    - `debug=1`: extra error details (dev only)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Image**
+  - `GET /:contract/:tokenId/image`
+  - Returns: `image/*` (or WebP when resized)
+  - Query:
+    - `mode=original`: 302 redirect to the source image URL
+    - `w`, `h`: max resize bounds (default 512, min 16, max 2048)
+    - `q`: WebP quality (default 70, min 30, max 90)
+    - `rpcUrl`: override the Ethereum RPC URL (optional)
+    - `debug=1`: extra error details (dev only)
 
-## Learn More
+## Examples (Meebits)
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+curl 'http://localhost:3000/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076/metadata'
+curl 'http://localhost:3000/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076/image?w=512&h=512&q=70'
+curl -I 'http://localhost:3000/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076/image?w=512&h=512&q=70'
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Caching (what to expect)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Responses are cache-friendly:
+- `Cache-Control` for browser + CDN caching
+- `ETag` + 304 support
 
-## Deploy on Vercel
+## Config (env)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **`NFT_RPC_URLS`**: comma-separated Ethereum RPC URLs (optional)
+- **`NFT_RPC_URL`**: single Ethereum RPC URL (optional)
+- **`IPFS_GATEWAY`**: IPFS gateway base (default `https://ipfs.io/ipfs`)
+- **`NEXT_PUBLIC_SITE_URL`** or **`SITE_URL`**: base URL used for metadata (default `http://localhost:3000`)
