@@ -32,7 +32,7 @@ export default function Home() {
       </section>
 
       <section className="mt-10 space-y-3">
-        <h2 className="font-bold">Example (Meebits)</h2>
+        <h2 className="font-bold">Examples (Meebits)</h2>
         <ul className="list-disc pl-5 space-y-1 text-foreground-muted">
           <li>
             <a
