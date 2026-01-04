@@ -9,6 +9,11 @@ export default function Home() {
         <p className="text-foreground-muted">
           Developer-friendly endpoints to fetch NFT metadata + images (IPFS + caching included).
         </p>
+        <ul className="mt-4 list-disc pl-5 space-y-1 text-foreground-muted">
+          <li>Source of truth is the chain: resolves <span className="text-foreground">tokenURI/uri</span> via read-only RPC calls.</li>
+          <li>No indexer, no database: metadata + images are fetched from the token’s URI (HTTP/IPFS/data:).</li>
+          <li>Cache-friendly responses (ETag + Cache-Control) + optional WebP resizing.</li>
+        </ul>
       </header>
 
       <section className="space-y-3">
@@ -47,6 +52,19 @@ export default function Home() {
           </li>
         </ul>
       </section>
+
+      <footer className="mt-12 text-foreground-muted">
+        Made by{" "}
+        <a
+          href="https://x.com/gwendall"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-link hover:underline font-bold"
+        >
+          Gwendall
+        </a>
+        .
+      </footer>
     </main>
   );
 }

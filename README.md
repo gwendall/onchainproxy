@@ -7,6 +7,20 @@ It:
 - follows IPFS URLs
 - serves images as-is (SVG/GIF/etc) or as **optimized WebP** (optional resize)
 
+## Why use it
+
+- **One stable URL** per token for both metadata and image.
+- **No client-side IPFS/CORS headaches**: your app always talks to the same origin.
+- **Cache-friendly responses** (ETag + Cache-Control), so repeated requests get fast.
+
+## How it works (high level)
+
+- Resolves `tokenURI()` (ERC-721) or `uri()` (ERC-1155) via JSON-RPC `eth_call` (tries multiple RPCs).
+- Fetches and parses the token metadata JSON (supports `data:` and IPFS).
+- Extracts the best `image*` field, resolves IPFS, then either:
+  - redirects to the original (`mode=original`)
+  - or proxies it and optionally resizes to WebP (`w/h/q`)
+
 ## Quickstart (local)
 
 ```bash
