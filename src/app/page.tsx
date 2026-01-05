@@ -7,12 +7,12 @@ export default function Home() {
       <header className="mb-12">
         <h1 className="font-bold mb-3">NFT PROXY</h1>
         <p className="text-foreground-muted">
-          Lightweight endpoints for NFT metadata + images - designed for thumbnails and UI.
+          Lightweight endpoints for Ethereum NFT metadata + images - designed for thumbnails and UI.
         </p>
         <p className="mt-3 text-foreground-muted">
           The problem: fetching NFT images is slow and flaky (IPFS gateways, huge images, random hosts). The naive
-          solution is to build an indexer + a database. This is the opposite: a tiny origin that always returns the
-          freshest URI from the chain, then lets caching do the heavy lifting.
+          solution is to build an indexer + a database. This is the opposite: a tiny origin that always resolves the
+          freshest URI from Ethereum, then lets caching do the heavy lifting.
         </p>
         <ul className="mt-4 list-disc pl-5 space-y-1 text-foreground-muted">
           <li>
