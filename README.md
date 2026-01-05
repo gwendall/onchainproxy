@@ -1,4 +1,4 @@
-# nft-proxy
+# NFTProxy
 
 Developer-friendly endpoints to fetch **EVM NFT metadata** and **images** without worrying about IPFS, CORS, remote domains, or flaky RPCs.
 
