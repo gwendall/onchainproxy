@@ -1,99 +1,99 @@
 # OnChainProxy
 
-Developer-friendly endpoints to fetch **on-chain asset metadata** and **images** without worrying about IPFS, CORS, remote domains, or flaky RPCs.
+Stable, cache-friendly URLs for on-chain asset metadata and images. Designed for thumbnails, wallets, and UI.
 
-Currently: **Ethereum + major L2s**.
+Repo: `https://github.com/gwendall/onchainproxy` (MIT License)
 
-It:
-- resolves `tokenURI()` / `uri()` (ERC-721 + ERC-1155)
-- follows IPFS URLs
-- serves images as-is (SVG/GIF/etc) or as **optimized WebP** (optional resize)
+## Supported chains
 
-## Why use it
+Use any of these in the path as `/:chain`:
 
-- **One stable URL** per token for both metadata and image.
-- **No client-side IPFS/CORS headaches**: your app always talks to the same origin.
-- **Cache-friendly responses** (ETag + Cache-Control), so repeated requests get fast.
+- `eth`
+- `base`
+- `arb`
+- `op`
+- `polygon`
+- `zksync`
+- `linea`
+- `scroll`
+- `polygon-zkevm`
 
-## How it works (high level)
+All chains are treated identically: read-only RPC, on-chain metadata resolution, and cacheable HTTP responses.
 
-- Resolves `tokenURI()` (ERC-721) or `uri()` (ERC-1155) on the selected chain via JSON-RPC `eth_call` (tries multiple RPCs).
-- Fetches and parses the token metadata JSON (supports `data:` and IPFS).
-- Extracts the best `image*` field, resolves IPFS, then either:
-  - returns the original (`raw=1`)
-  - or proxies it and optionally resizes to WebP (`w/h/q`)
+Tip: you can still override RPC per-request with `?rpcUrl=...`.
 
-## Quickstart (local)
+## Why OnChainProxy exists
 
-```bash
-pnpm install
-pnpm dev
-```
+Fetching on-chain images is slow, flaky, and inconsistent (IPFS gateways, huge images, random hosts, on-chain data URLs).
+The naive solution is an indexer + a database. This is the opposite: a tiny origin that resolves the freshest tokenURI/uri
+from chain RPC at request time, then lets caching do the heavy lifting.
 
-## Endpoints (HTTP)
+## At a broader level
+
+If digital art and on-chain assets are meant to last, their interfaces need to be more resilient than the platforms that serve them.
+Today, much of this UX still depends on centralized services sitting between users and the chain. OnChainProxy is a small step toward
+reducing that dependency - by making on-chain data directly consumable over cacheable HTTP, without introducing new state or infrastructure.
+
+Non-goals: indexing, persistence, analytics, ownership history, or marketplace APIs.
+
+## What it does
+
+- Resolves on-chain metadata at request time (read-only EVM JSON-RPC calls).
+- Normalizes URIs (IPFS + data URLs) into a cacheable HTTP response.
+- Uniformizes images for UI: returns WebP thumbnails when possible (size/quality) so interfaces stay fast and consistent.
+- Gives you stable image URLs for `<img>`, `<picture>`, and APIs.
+- Acts like a “hidden CDN”: ETag + Cache-Control enable fast edge/browser caching.
+
+## Endpoints
+
+Use OnChainProxy as the src for images or as a metadata fetcher - it resolves on-chain tokenURI at request time and returns a cacheable HTTP response.
+
+By default, the image endpoint returns WebP when possible (UI-friendly thumbnails). Use `raw=1` to keep the original bytes (no resize / no WebP).
 
 - **Metadata**
   - `GET /:chain/:contract/:tokenId`
-  - Returns: JSON (includes resolved `metadataUrl`, parsed `metadata`, and `imageUrl` when available)
-  - Path:
-    - `chain`: one of `eth`, `base`, `arb`, `op`, `polygon`, `zksync`, `linea`, `scroll`, `polygon-zkevm`
-  - Query:
-    - `rpcUrl`: override the RPC URL (optional)
-    - `debug=1`: extra error details (dev only)
+  - Returns JSON metadata (and the resolved image URL).
+  - Query params: `rpcUrl`, `debug=1`
 
 - **Image**
   - `GET /:chain/:contract/:tokenId/image`
-  - Returns: `image/webp` **when possible** (thumbnail-optimized). Falls back to the original format when WebP transform is not available.
-  - Path:
-    - `chain`: one of `eth`, `base`, `arb`, `op`, `polygon`, `zksync`, `linea`, `scroll`, `polygon-zkevm`
-  - Query:
-    - `raw=1`: return the original image (no resize / no WebP). For remote URLs this is a 302 redirect; for `data:` URLs this returns the raw bytes.
-    - `svg=1`: **SVG escape hatch**. Keep SVG as SVG (vector) while still proxying it from this origin (no WebP rasterization). This exists for the niche case where you want same-origin SVG bytes without a redirect. (If you don’t care, ignore it.)
-    - `w`, `h`: max resize bounds (default 512, min 16, max 2048)
-    - `q`: WebP quality (default 70, min 30, max 90)
-    - `rpcUrl`: override the RPC URL (optional)
-    - `debug=1`: extra error details (dev only)
+  - Returns WebP when possible (thumbnail-optimized).
+  - Query params: `raw=1`, `svg=1`, `w`, `h`, `q`, `rpcUrl`, `debug=1`, `json=1`
 
-## Special cases
+Cache-friendly responses: `ETag` + `Cache-Control`.
 
-- **CryptoPunks (pre-ERC721)**
-  - You can use either contract address in the URL:
-    - **CryptoPunks (original)**: `0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb`
-    - **CryptoPunksData (helper)**: `0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2`
-  - Under the hood, OnChainProxy always reads the SVG + attributes from **CryptoPunksData**.
-  - Example:
-    - `GET /eth/0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb/0`
-    - `GET /eth/0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb/0/image?w=512`
-    - `GET /eth/0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2/0`
+## Notes (formats)
 
-## Examples (CryptoPunks)
+- Standards: ERC-721 and ERC-1155 (via tokenURI/uri).
+- Special cases: legacy contracts like CryptoPunks are supported too.
 
-```bash
-curl 'http://localhost:3000/eth/0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb/2113'
-curl 'http://localhost:3000/eth/0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb/2113/image?w=512&h=512&q=70'
-curl -I 'http://localhost:3000/eth/0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb/2113/image?w=512&h=512&q=70'
-```
+## Example (CryptoPunks)
 
-## Caching (what to expect)
+- `GET /eth/0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb/2113`
+- `GET /eth/0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb/2113/image?w=512&h=512&q=70`
 
-Responses are cache-friendly:
-- `Cache-Control` for browser + CDN caching
-- `ETag` + 304 support
+## Query params
+
+**GET /:chain/:contract/:tokenId**
+
+- `chain`: one of `eth, base, arb, op, polygon, zksync, linea, scroll, polygon-zkevm`
+- `rpcUrl`: override the chain RPC URL (optional)
+- `debug=1`: extra error details (dev only)
+
+**GET /:chain/:contract/:tokenId/image**
+
+- `chain`: one of `eth, base, arb, op, polygon, zksync, linea, scroll, polygon-zkevm`
+- `raw=1`: return the original image (no resize / no WebP)
+- SVG behavior: by default, SVGs are rasterized to WebP (so `w/h/q` applies). `svg=1` keeps SVG as SVG (vector) while still proxying from this origin (no redirect).
+- `w`, `h`: max resize bounds (default 512, min 16, max 2048)
+- `q`: WebP quality (default 70, min 30, max 90)
+- `rpcUrl`: override the chain RPC URL (optional)
+- `json=1`: return JSON on error (otherwise SVG fallback)
+- `debug=1`: extra error details (dev only)
 
 ## Config (env)
 
-- **Per-chain (preferred)**:
-  - **`ONCHAIN_RPC_URLS_ETH`**, **`ONCHAIN_RPC_URL_ETH`**
-  - **`ONCHAIN_RPC_URLS_ARB`**, **`ONCHAIN_RPC_URL_ARB`**
-  - **`ONCHAIN_RPC_URLS_OP`**, **`ONCHAIN_RPC_URL_OP`**
-  - **`ONCHAIN_RPC_URLS_BASE`**, **`ONCHAIN_RPC_URL_BASE`**
-  - **`ONCHAIN_RPC_URLS_POLYGON`**, **`ONCHAIN_RPC_URL_POLYGON`**
-  - **`ONCHAIN_RPC_URLS_ZKSYNC`**, **`ONCHAIN_RPC_URL_ZKSYNC`**
-  - **`ONCHAIN_RPC_URLS_LINEA`**, **`ONCHAIN_RPC_URL_LINEA`**
-  - **`ONCHAIN_RPC_URLS_SCROLL`**, **`ONCHAIN_RPC_URL_SCROLL`**
-  - **`ONCHAIN_RPC_URLS_POLYGON_ZKEVM`**, **`ONCHAIN_RPC_URL_POLYGON_ZKEVM`**
-- **Global (backwards-compatible fallback)**:
-  - **`ONCHAIN_RPC_URLS`**: comma-separated RPC URLs (applies to all chains)
-  - **`ONCHAIN_RPC_URL`**: single RPC URL (applies to all chains)
-- **`IPFS_GATEWAY`**: IPFS gateway base (default `https://ipfs.io/ipfs`)
-- **`NEXT_PUBLIC_SITE_URL`** or **`SITE_URL`**: base URL used for metadata (default `http://localhost:3000`)
+- `ONCHAIN_RPC_URLS` / `ONCHAIN_RPC_URL`: global RPC fallback (optional)
+- Per-chain: `ONCHAIN_RPC_URLS_ETH`, `ONCHAIN_RPC_URLS_BASE`, etc. (optional)
+- `IPFS_GATEWAY`: IPFS gateway base (default `https://ipfs.io/ipfs`)
+- `NEXT_PUBLIC_SITE_URL` / `SITE_URL`: base URL used in metadata (default `http://localhost:3000`)

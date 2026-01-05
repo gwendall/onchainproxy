@@ -5,6 +5,7 @@ export default function Home() {
   const chain = "eth";
   const punksOriginalContract = "0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb";
   const punkTokenId = "2113";
+  const repoUrl = "https://github.com/gwendall/onchainproxy";
 
   const metadataParams = ["rpcUrl", "debug=1"] as const;
   const imageParams = ["raw=1", "svg=1", "w", "h", "q", "rpcUrl", "debug=1", "json=1"] as const;
@@ -212,6 +213,28 @@ export default function Home() {
           </div>
         </Section>
 
+        <Section title="Config (env)">
+          <ul className="list-disc pl-5 space-y-1 text-foreground-muted">
+            <li>
+              <span className="text-foreground">ONCHAIN_RPC_URLS</span> /{" "}
+              <span className="text-foreground">ONCHAIN_RPC_URL</span>: global RPC fallback (optional)
+            </li>
+            <li>
+              Per-chain: <span className="text-foreground">ONCHAIN_RPC_URLS_ETH</span>,{" "}
+              <span className="text-foreground">ONCHAIN_RPC_URLS_BASE</span>, etc. (optional)
+            </li>
+            <li>
+              <span className="text-foreground">IPFS_GATEWAY</span>: IPFS gateway base (default{" "}
+              <span className="text-foreground">https://ipfs.io/ipfs</span>)
+            </li>
+            <li>
+              <span className="text-foreground">NEXT_PUBLIC_SITE_URL</span> /{" "}
+              <span className="text-foreground">SITE_URL</span>: base URL used in metadata (default{" "}
+              <span className="text-foreground">http://localhost:3000</span>)
+            </li>
+          </ul>
+        </Section>
+
         <footer className="text-foreground-muted">
           Made by{" "}
           <a
@@ -222,7 +245,16 @@ export default function Home() {
           >
             Gwendall
           </a>
-          .
+          .{" "}
+          <a
+            href={repoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-link hover:underline font-bold"
+          >
+            Open source
+          </a>{" "}
+          <span className="text-foreground-faint">(MIT License)</span>.
         </footer>
       </div>
     </main>
