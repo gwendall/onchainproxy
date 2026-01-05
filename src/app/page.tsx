@@ -32,7 +32,7 @@ export default function Home() {
           <p className="text-foreground-muted">
             If digital art and on-chain assets are meant to last, their interfaces need to be more resilient
             than the platforms that serve them. Today, much of NFT UX still depends on centralized services sitting
-            between users and the chain. NFTProxy is a small step toward reducing that dependency — by making on-chain
+            between users and the chain. NFTProxy is a small step toward reducing that dependency - by making on-chain
             data directly consumable over cacheable HTTP, without introducing new state or infrastructure.
           </p>
           <p className="text-foreground-muted">
@@ -61,7 +61,7 @@ export default function Home() {
       <section className="space-y-3">
         <h2 className="font-bold">Endpoints</h2>
         <p className="text-foreground-muted">
-          Use NFT Proxy as the src for images or as a metadata fetcher — it resolves on-chain tokenURI at request time and
+          Use NFT Proxy as the src for images or as a metadata fetcher - it resolves on-chain tokenURI at request time and
           returns a cacheable HTTP response.
         </p>
         <p className="text-foreground-muted">
