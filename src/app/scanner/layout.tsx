@@ -45,5 +45,3 @@ export default function ScannerLayout({
 }>) {
   return children;
 }
-
-

@@ -1,8 +1,7 @@
 "use server";
 
 import { Alchemy, Network, NftFilters } from "alchemy-sdk";
-import { ethers } from "ethers";
-import { createPublicClient, http, getAddress } from "viem";
+import { createPublicClient, http, getAddress, isAddress } from "viem";
 import { normalize } from "viem/ens";
 import { mainnet } from "viem/chains";
 import { resolveNftMetadata } from "@/lib/nft/metadata";
@@ -40,10 +39,8 @@ const getAlchemy = (chain: SupportedChain) => {
   return new Alchemy(config);
 };
 
-const isHexAddress = (s: string) => /^0x[a-fA-F0-9]{40}$/.test(String(s || "").trim());
 const looksLikeEnsName = (s: string) => {
   const v = String(s || "").trim();
-  // Minimal sanity checks (let ethers handle full normalization).
   return v.length > 0 && v.includes(".") && !v.includes(" ");
 };
 
@@ -92,8 +89,8 @@ export async function scanNfts(addressOrEns: string, chain: SupportedChain) {
     const raw = String(addressOrEns || "").trim();
 
     const { resolvedAddress, resolvedTarget } = await (async () => {
-      if (isHexAddress(raw)) {
-        const checksum = ethers.utils.getAddress(raw);
+      if (isAddress(raw)) {
+        const checksum = getAddress(raw);
         return { resolvedAddress: checksum, resolvedTarget: checksum };
       }
       if (looksLikeEnsName(raw)) {
@@ -157,60 +154,49 @@ export async function scanNfts(addressOrEns: string, chain: SupportedChain) {
       resolvedAddress,
       resolvedTarget,
     };
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("Scan error details:", e);
-    throw new Error(e.message || "Failed to scan NFTs");
+    throw new Error(e instanceof Error ? e.message : "Failed to scan NFTs");
   }
 }
 
 export async function checkNftStatus(chain: string, contract: string, tokenId: string) {
   try {
-    // 1. Check Metadata Resolution
-    // We use the existing logic of onchainproxy which is very robust
     const metadataResult = await resolveNftMetadata({
       chain: chain as SupportedChain,
       contract,
       tokenId,
       rpcUrlQuery: null,
-      cacheTtlMs: 60 * 1000, // 1 minute cache for checks
+      cacheTtlMs: 60 * 1000,
     });
 
     let imageOk = false;
 
-    // 2. Check Image Availability
     if (metadataResult.imageUrl) {
       try {
-        const res = await fetch(metadataResult.imageUrl, { method: "HEAD", signal: AbortSignal.timeout(5000) });
+        const res = await fetch(metadataResult.imageUrl, {
+          method: "HEAD",
+          signal: AbortSignal.timeout(5000),
+        });
         if (res.ok) {
           imageOk = true;
         } else {
-            // Some servers block HEAD, try GET with range or just assume OK if it resolved?
-            // Let's try a small GET if HEAD fails
-             const resGet = await fetch(metadataResult.imageUrl, { 
-                method: "GET", 
-                headers: { Range: "bytes=0-10" },
-                signal: AbortSignal.timeout(5000)
-             });
-             if (resGet.ok) imageOk = true;
+          // Some servers block HEAD, try GET with range
+          const resGet = await fetch(metadataResult.imageUrl, {
+            method: "GET",
+            headers: { Range: "bytes=0-10" },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (resGet.ok) imageOk = true;
         }
-      } catch (e) {
+      } catch {
         // Image fetch failed
       }
     }
 
-    return {
-      ok: true, // The check process itself ran OK
-      metadataOk: true, // resolveNftMetadata didn't throw
-      imageOk,
-    };
-
-  } catch (e: any) {
-    // resolveNftMetadata threw an error, meaning metadata is down or unreachable
-    return {
-      ok: false,
-      metadataOk: false,
-      imageOk: false,
-      error: e.message,
-    };
+    return { ok: true, metadataOk: true, imageOk };
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    return { ok: false, metadataOk: false, imageOk: false, error: message };
   }
 }

@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { isAddress } from "viem";
 import { Section } from "@/components/Section";
 import { scanNfts, checkNftStatus } from "./actions";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
@@ -17,7 +20,6 @@ type NftItem = {
   error?: string;
   metadataStatus?: "ok" | "error";
   imageStatus?: "ok" | "error";
-  lastScannedAt?: number; // epoch ms (set whenever this NFT is checked)
 };
 
 const shortAddress = (addr: string) => {
@@ -35,12 +37,12 @@ const normalizeImageUrl = (url: string | undefined) => {
   return u;
 };
 
-const isHexAddress = (s: string) => /^0x[a-fA-F0-9]{40}$/.test(String(s || "").trim());
 const looksLikeEnsName = (s: string) => {
   const v = String(s || "").trim();
   return v.length > 0 && v.includes(".") && !v.includes(" ");
 };
-const isValidTarget = (s: string) => isHexAddress(s) || looksLikeEnsName(s);
+
+const isValidTarget = (s: string) => isAddress(s) || looksLikeEnsName(s);
 
 const openSeaChainSlug = (chain: string) => {
   switch (chain) {
@@ -60,22 +62,18 @@ const openSeaChainSlug = (chain: string) => {
 };
 
 type ScannerSession = {
-  target: string; // what the user typed (0x... or ENS)
-  resolvedAddress: string; // checksummed 0x...
+  target: string;
+  resolvedAddress: string;
   chain: SupportedChain;
   savedAt: number;
   scanStartedAt?: number;
   scanEndedAt?: number;
   nfts: NftItem[];
-  wasScanning: boolean;
 };
 
 const sessionKey = (target: string, chain: SupportedChain) =>
   `onchainproxy:scanner:${chain}:${target.toLowerCase()}`;
 const lastSessionKey = "onchainproxy:scanner:lastSession";
-
-const getNftKey = (n: Pick<NftItem, "chain" | "contract" | "tokenId">) =>
-  `${n.chain}:${n.contract.toLowerCase()}:${n.tokenId}`;
 
 const resetNftScan = (n: NftItem): NftItem => ({
   ...n,
@@ -85,20 +83,58 @@ const resetNftScan = (n: NftItem): NftItem => ({
   imageStatus: undefined,
 });
 
+const getRestoredSession = (): { session: ScannerSession; nfts: NftItem[]; shouldResume: boolean } | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const lastRaw = window.localStorage.getItem(lastSessionKey);
+    if (!lastRaw) return null;
+
+    const last = JSON.parse(lastRaw) as { target?: string; chain?: SupportedChain };
+    if (!last?.target || !last?.chain) return null;
+
+    const raw = window.localStorage.getItem(sessionKey(last.target, last.chain));
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as ScannerSession;
+    if (!parsed.target || !parsed.resolvedAddress || !Array.isArray(parsed.nfts)) return null;
+
+    const restoredNfts = parsed.nfts.map((n) =>
+      n.status === "scanning" ? { ...n, status: "pending" as const } : n
+    );
+
+    return {
+      session: parsed,
+      nfts: restoredNfts,
+      shouldResume: restoredNfts.some((n) => n.status === "pending"),
+    };
+  } catch {
+    return null;
+  }
+};
+
 export default function ScannerPage() {
-  const [input, setInput] = useState("");
-  const [selectedChain, setSelectedChain] = useState<SupportedChain>("eth");
-  const [submittedTarget, setSubmittedTarget] = useState<string>("");
-  const [submittedAddress, setSubmittedAddress] = useState<string>(""); // resolved 0x...
-  const [submittedChain, setSubmittedChain] = useState<SupportedChain>("eth");
-  const [nfts, setNfts] = useState<NftItem[]>([]);
+  const restored = useMemo(() => getRestoredSession(), []);
+  
+  const [input, setInput] = useState(restored?.session.target ?? "");
+  const [selectedChain, setSelectedChain] = useState<SupportedChain>(restored?.session.chain ?? "eth");
+  const [submittedTarget, setSubmittedTarget] = useState(restored?.session.target ?? "");
+  const [submittedAddress, setSubmittedAddress] = useState(restored?.session.resolvedAddress ?? "");
+  const [submittedChain, setSubmittedChain] = useState<SupportedChain>(restored?.session.chain ?? "eth");
+  const [nfts, setNfts] = useState<NftItem[]>(restored?.nfts ?? []);
   const [loading, setLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
-  const [scanStartedAt, setScanStartedAt] = useState<number | null>(null);
-  const [scanEndedAt, setScanEndedAt] = useState<number | null>(null);
+  const [scanStartedAt, setScanStartedAt] = useState<number | null>(restored?.session.scanStartedAt ?? null);
+  const [scanEndedAt, setScanEndedAt] = useState<number | null>(restored?.session.scanEndedAt ?? null);
   const cancelRef = useRef(false);
   const runIdRef = useRef(0);
-  const autoScanTimerRef = useRef<number | null>(null);
+  const autoScanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const needsAutoScanRef = useRef(restored?.shouldResume ?? false);
+  const nftsRef = useRef(nfts);
+  
+  // Keep ref in sync with state (must be in effect, not during render)
+  useEffect(() => {
+    nftsRef.current = nfts;
+  }, [nfts]);
 
   const stats = useMemo(() => {
     const total = nfts.length;
@@ -141,70 +177,8 @@ export default function ScannerPage() {
     [nfts]
   );
 
-  // Restore last session on mount (and auto-resume if it was scanning).
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      // New format (chain + target)
-      const lastRaw = window.localStorage.getItem(lastSessionKey);
-      let last: { target: string; chain: SupportedChain } | null = null;
-      if (lastRaw) {
-        try {
-          const parsed = JSON.parse(lastRaw) as { target?: string; address?: string; chain?: SupportedChain };
-          const target = parsed?.target || parsed?.address;
-          if (target && parsed?.chain) last = { target, chain: parsed.chain };
-        } catch {
-          // ignore
-        }
-      }
 
-      // Back-compat: older builds stored only the last address/target (assume eth).
-      if (!last) {
-        const legacy = window.localStorage.getItem("onchainproxy:scanner:last");
-        if (legacy) last = { target: legacy, chain: "eth" };
-      }
-
-      if (!last) return;
-
-      const raw = window.localStorage.getItem(sessionKey(last.target, last.chain));
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as ScannerSession;
-      // Back-compat: older sessions stored { address } (and used it as the cache key).
-      const target = (parsed as unknown as { target?: string; address?: string })?.target
-        || (parsed as unknown as { address?: string })?.address
-        || "";
-      const resolvedAddress = (parsed as unknown as { resolvedAddress?: string; address?: string })?.resolvedAddress
-        || (parsed as unknown as { address?: string })?.address
-        || "";
-      if (!target || !resolvedAddress || !parsed?.chain || !Array.isArray(parsed.nfts)) return;
-
-      // Any "scanning" item becomes "pending" on restore.
-      const restoredNfts = parsed.nfts.map((n) => (n.status === "scanning" ? { ...n, status: "pending" as const } : n));
-
-      setSubmittedTarget(target);
-      setSubmittedAddress(resolvedAddress);
-      setInput(target);
-      setSelectedChain(parsed.chain);
-      setSubmittedChain(parsed.chain);
-      setNfts(restoredNfts);
-      setScanStartedAt(typeof parsed.scanStartedAt === "number" ? parsed.scanStartedAt : null);
-      setScanEndedAt(typeof parsed.scanEndedAt === "number" ? parsed.scanEndedAt : null);
-
-      // Always resume automatically after refresh if there is anything left to scan.
-      // (Even if the previous session was paused/cancelled.)
-      const shouldResume = restoredNfts.some((n) => n.status === "pending" || n.status === "scanning");
-      if (shouldResume) {
-        setTimeout(() => {
-          void startScan({ auto: true });
-        }, 0);
-      }
-    } catch {
-      // ignore
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Persist session whenever it changes.
+  // Persist session whenever it changes
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!submittedTarget || !submittedAddress) return;
@@ -217,25 +191,23 @@ export default function ScannerPage() {
         scanStartedAt: scanStartedAt ?? undefined,
         scanEndedAt: scanEndedAt ?? undefined,
         nfts,
-        wasScanning: isScanning,
       };
       window.localStorage.setItem(sessionKey(submittedTarget, submittedChain), JSON.stringify(payload));
       window.localStorage.setItem(lastSessionKey, JSON.stringify({ target: submittedTarget, chain: submittedChain }));
     } catch {
-      // ignore storage errors
+      // Ignore storage errors
     }
-  }, [submittedTarget, submittedAddress, submittedChain, nfts, isScanning, scanStartedAt, scanEndedAt]);
+  }, [submittedTarget, submittedAddress, submittedChain, nfts, scanStartedAt, scanEndedAt]);
 
-  const scanOne = async (idx: number, opts?: { force?: boolean; runId?: number }) => {
+  const scanOne = useCallback(async (idx: number, opts?: { force?: boolean; runId?: number }) => {
     const runId = opts?.runId ?? runIdRef.current;
     const force = Boolean(opts?.force);
 
-    // snapshot current item
-    const current = nfts[idx];
+    // Use ref to get latest nfts state
+    const current = nftsRef.current[idx];
     if (!current) return;
     if (!force && (current.status === "ok" || current.status === "error")) return;
 
-    // mark scanning
     setNfts((prev) => {
       const next = [...prev];
       const it = next[idx];
@@ -246,10 +218,8 @@ export default function ScannerPage() {
 
     try {
       const status = await checkNftStatus(current.chain, current.contract, current.tokenId);
-      if (runId !== runIdRef.current) return; // stale run
-      if (cancelRef.current) return;
+      if (runId !== runIdRef.current || cancelRef.current) return;
 
-      const ts = Date.now();
       setNfts((prev) => {
         const next = [...prev];
         const it = next[idx];
@@ -260,14 +230,11 @@ export default function ScannerPage() {
           metadataStatus: status.metadataOk ? "ok" : "error",
           imageStatus: status.imageOk ? "ok" : "error",
           error: status.ok ? undefined : status.error,
-          lastScannedAt: ts,
         };
         return next;
       });
     } catch {
-      if (runId !== runIdRef.current) return;
-      if (cancelRef.current) return;
-      const ts = Date.now();
+      if (runId !== runIdRef.current || cancelRef.current) return;
       setNfts((prev) => {
         const next = [...prev];
         const it = next[idx];
@@ -278,16 +245,15 @@ export default function ScannerPage() {
           error: "Check failed",
           metadataStatus: "error",
           imageStatus: "error",
-          lastScannedAt: ts,
         };
         return next;
       });
     }
-  };
+  }, []);
 
-  const startScan = async (opts?: { auto?: boolean }) => {
-    if (!submittedAddress || nfts.length === 0) return;
-    if (isScanning) return;
+  const startScan = useCallback(async () => {
+    const nftsLength = nftsRef.current.length;
+    if (!submittedAddress || nftsLength === 0 || isScanning) return;
 
     cancelRef.current = false;
     runIdRef.current += 1;
@@ -296,16 +262,12 @@ export default function ScannerPage() {
     if (!scanStartedAt) setScanStartedAt(Date.now());
     setScanEndedAt(null);
 
-    // Scan in current order, skipping already scanned NFTs.
-    for (let i = 0; i < nfts.length; i++) {
-      if (runId !== runIdRef.current) break;
-      if (cancelRef.current) break;
-
-      const item = nfts[i];
-      if (!item) continue;
-      if (item.status === "ok" || item.status === "error") continue;
-
-      // eslint-disable-next-line no-await-in-loop
+    // Scan in array order (first to last as rendered)
+    for (let i = 0; i < nftsLength; i++) {
+      if (runId !== runIdRef.current || cancelRef.current) break;
+      // Always check latest state via ref for current status
+      const item = nftsRef.current[i];
+      if (!item || item.status === "ok" || item.status === "error") continue;
       await scanOne(i, { runId });
     }
 
@@ -313,73 +275,75 @@ export default function ScannerPage() {
       setIsScanning(false);
       setScanEndedAt(Date.now());
     }
-  };
+  }, [submittedAddress, isScanning, scanStartedAt, scanOne]);
 
-  const cancelScan = () => {
+  const cancelScan = useCallback(() => {
     cancelRef.current = true;
-    runIdRef.current += 1; // invalidate in-flight updates
+    runIdRef.current += 1;
     setIsScanning(false);
-  };
+  }, []);
 
-  const continueScan = () => void startScan();
+  const continueScan = useCallback(() => {
+    void startScan();
+  }, [startScan]);
 
-  const rescanWallet = () => {
+  const rescanWallet = useCallback(() => {
     if (!submittedAddress || nfts.length === 0) return;
     cancelScan();
+    needsAutoScanRef.current = true;
     setNfts((prev) => prev.map(resetNftScan));
     setScanStartedAt(Date.now());
     setScanEndedAt(null);
-    setTimeout(() => void startScan(), 0);
-  };
+  }, [submittedAddress, nfts.length, cancelScan]);
 
-  const handleScan = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isValidTarget(input)) return;
-
-    const nextTarget = input.trim();
-    // If we already have a cached session for this target, reuse it and continue.
-    if (typeof window !== "undefined") {
-      try {
-        const raw = window.localStorage.getItem(sessionKey(nextTarget, selectedChain));
-        if (raw) {
-          const parsed = JSON.parse(raw) as ScannerSession;
-          const target = (parsed as unknown as { target?: string; address?: string })?.target
-            || (parsed as unknown as { address?: string })?.address
-            || nextTarget;
-          const resolvedAddress = (parsed as unknown as { resolvedAddress?: string; address?: string })?.resolvedAddress
-            || (parsed as unknown as { address?: string })?.address
-            || "";
-          if (resolvedAddress && Array.isArray(parsed.nfts) && parsed.nfts.length > 0) {
-            const restoredNfts = parsed.nfts.map((n) =>
-              n.status === "scanning" ? { ...n, status: "pending" as const } : n
-            );
-            setSubmittedTarget(target);
-            setSubmittedAddress(resolvedAddress);
-            setSubmittedChain(parsed.chain ?? selectedChain);
-            setNfts(restoredNfts);
-            setScanStartedAt(typeof parsed.scanStartedAt === "number" ? parsed.scanStartedAt : Date.now());
-            setScanEndedAt(typeof parsed.scanEndedAt === "number" ? parsed.scanEndedAt : null);
-            setLoading(false);
-            setTimeout(() => void startScan(), 0);
-            return;
-          }
-        }
-      } catch {
-        // ignore
-      }
+  // Auto-start scan when NFTs are loaded and needsAutoScanRef is set
+  useEffect(() => {
+    if (needsAutoScanRef.current && !isScanning && nftsRef.current.length > 0 && submittedAddress) {
+      needsAutoScanRef.current = false;
+      // Schedule outside the synchronous effect body to avoid lint warning
+      requestAnimationFrame(() => void startScan());
     }
+  }, [isScanning, nfts, submittedAddress, startScan]);
 
+  const restoreSession = useCallback((target: string, chain: SupportedChain): boolean => {
+    if (typeof window === "undefined") return false;
+    try {
+      const raw = window.localStorage.getItem(sessionKey(target, chain));
+      if (!raw) return false;
+      const parsed = JSON.parse(raw) as ScannerSession;
+      if (!parsed.resolvedAddress || !Array.isArray(parsed.nfts) || parsed.nfts.length === 0) return false;
+
+      const restoredNfts = parsed.nfts.map((n) =>
+        n.status === "scanning" ? { ...n, status: "pending" as const } : n
+      );
+      
+      // Mark that we need to auto-scan after state updates
+      needsAutoScanRef.current = restoredNfts.some((n) => n.status === "pending");
+      
+      setSubmittedTarget(parsed.target);
+      setSubmittedAddress(parsed.resolvedAddress);
+      setSubmittedChain(parsed.chain);
+      setNfts(restoredNfts);
+      setScanStartedAt(parsed.scanStartedAt ?? Date.now());
+      setScanEndedAt(parsed.scanEndedAt ?? null);
+      setLoading(false);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const fetchAndScan = useCallback(async (target: string, chain: SupportedChain) => {
     setLoading(true);
     setNfts([]);
-    setSubmittedTarget(nextTarget);
+    setSubmittedTarget(target);
     setSubmittedAddress("");
-    setSubmittedChain(selectedChain);
+    setSubmittedChain(chain);
     setScanStartedAt(Date.now());
     setScanEndedAt(null);
 
     try {
-      // Step 1: Fetch NFTs from Alchemy
-      const result = await scanNfts(nextTarget, selectedChain);
+      const result = await scanNfts(target, chain);
       if (result?.resolvedTarget) {
         setSubmittedTarget(result.resolvedTarget);
         setInput(result.resolvedTarget);
@@ -387,27 +351,39 @@ export default function ScannerPage() {
       if (result?.resolvedAddress) {
         setSubmittedAddress(result.resolvedAddress);
       }
-      
-      const items: NftItem[] = result.nfts.map((n: any) => ({
-        contract: n.contract?.address,
+
+      const items: NftItem[] = result.nfts.map((n) => ({
+        contract: n.contract?.address ?? "",
         tokenId: n.tokenId,
-        chain: selectedChain,
+        chain,
         title: n.title || `#${n.tokenId}`,
         collection: n.collection,
         thumbnailUrl: n.thumbnailUrl,
-        status: "pending",
+        status: "pending" as const,
       }));
 
+      // Mark that we need to auto-scan after state updates
+      needsAutoScanRef.current = items.length > 0;
+      
       setNfts(items);
       setLoading(false);
-
-      // Step 2: Scan each NFT one by one
-      setTimeout(() => void startScan(), 0);
-
-    } catch (err: any) {
-      alert("Error fetching NFTs: " + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      alert("Error fetching NFTs: " + message);
       setLoading(false);
     }
+  }, []);
+
+  const handleScan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isValidTarget(input)) return;
+
+    const target = input.trim();
+    if (restoreSession(target, selectedChain)) {
+      // Auto-scan will be triggered by the effect when NFTs are loaded
+      return;
+    }
+    await fetchAndScan(target, selectedChain);
   };
 
   const inputTrimmed = input.trim();
@@ -415,96 +391,36 @@ export default function ScannerPage() {
   const isChainSupportedForWallet = alchemyWalletChains.includes(selectedChain);
   const canSubmit = isChainSupportedForWallet && isValidTarget(inputTrimmed) && !(loading && nfts.length === 0);
 
-  // Auto-start scan when a new valid address is entered (debounced).
+  // Auto-start scan when a new valid address is entered (debounced)
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (autoScanTimerRef.current) window.clearTimeout(autoScanTimerRef.current);
+    if (autoScanTimerRef.current) clearTimeout(autoScanTimerRef.current);
 
     const next = inputTrimmed;
     if (!isValidTarget(next)) return;
     if (next.toLowerCase() === submittedTarget.toLowerCase() && selectedChain === submittedChain) return;
-    if (loading || isScanning) return;
-    if (!isChainSupportedForWallet) return;
+    if (loading || isScanning || !isChainSupportedForWallet) return;
 
-    autoScanTimerRef.current = window.setTimeout(() => {
-      // Trigger the same flow as submit, but without requiring a button click.
-      void (async () => {
-        // If we already have a cached session for this target, reuse it and continue.
-        try {
-          const raw = window.localStorage.getItem(sessionKey(next, selectedChain));
-          if (raw) {
-            const parsed = JSON.parse(raw) as ScannerSession;
-            const target = (parsed as unknown as { target?: string; address?: string })?.target
-              || (parsed as unknown as { address?: string })?.address
-              || next;
-            const resolvedAddress = (parsed as unknown as { resolvedAddress?: string; address?: string })?.resolvedAddress
-              || (parsed as unknown as { address?: string })?.address
-              || "";
-            if (resolvedAddress && Array.isArray(parsed.nfts) && parsed.nfts.length > 0) {
-              const restoredNfts = parsed.nfts.map((n) =>
-                n.status === "scanning" ? { ...n, status: "pending" as const } : n
-              );
-              setSubmittedTarget(target);
-              setSubmittedAddress(resolvedAddress);
-              setSubmittedChain(selectedChain);
-              setNfts(restoredNfts);
-              setLoading(false);
-              setTimeout(() => void startScan(), 0);
-              return;
-            }
-          }
-        } catch {
-          // ignore
-        }
-
-        setLoading(true);
-        setNfts([]);
-        setSubmittedTarget(next);
-        setSubmittedAddress("");
-        setSubmittedChain(selectedChain);
-
-        try {
-          const result = await scanNfts(next, selectedChain);
-          if (result?.resolvedTarget) {
-            setSubmittedTarget(result.resolvedTarget);
-            setInput(result.resolvedTarget);
-          }
-          if (result?.resolvedAddress) {
-            setSubmittedAddress(result.resolvedAddress);
-          }
-          const items: NftItem[] = result.nfts.map((n: any) => ({
-            contract: n.contract?.address,
-            tokenId: n.tokenId,
-            chain: selectedChain,
-            title: n.title || `#${n.tokenId}`,
-            collection: n.collection,
-            thumbnailUrl: n.thumbnailUrl,
-            status: "pending",
-            lastScannedAt: undefined,
-          }));
-          setNfts(items);
-          setLoading(false);
-          setTimeout(() => void startScan(), 0);
-        } catch (err: any) {
-          alert("Error fetching NFTs: " + err.message);
-          setLoading(false);
-        }
-      })();
+    autoScanTimerRef.current = setTimeout(() => {
+      if (!restoreSession(next, selectedChain)) {
+        void fetchAndScan(next, selectedChain);
+      }
+      // Auto-scan will be triggered by the effect when NFTs are loaded
     }, 400);
 
     return () => {
-      if (autoScanTimerRef.current) window.clearTimeout(autoScanTimerRef.current);
+      if (autoScanTimerRef.current) clearTimeout(autoScanTimerRef.current);
     };
-  }, [inputTrimmed, submittedTarget, loading, isScanning, scanStartedAt, selectedChain, isChainSupportedForWallet, submittedChain]);
+  }, [inputTrimmed, submittedTarget, loading, isScanning, selectedChain, isChainSupportedForWallet, submittedChain, restoreSession, fetchAndScan]);
 
   return (
     <main className="min-h-screen max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 font-mono">
       <div className="space-y-8 sm:space-y-10">
         <header className="space-y-3">
-          <a href="/" className="inline-flex items-center gap-1 leading-none text-foreground-faint hover:underline">
+          <Link href="/" className="inline-flex items-center gap-1 leading-none text-foreground-faint hover:underline">
             <ArrowLeft className="w-4 h-4 shrink-0" />
             <span className="leading-none">Back to docs</span>
-          </a>
+          </Link>
           <h1 className="font-bold">NFT Scanner</h1>
           <p className="text-foreground-muted">
             Enter an Ethereum address or ENS name to scan owned NFTs and check if their metadata and images are live.
@@ -657,21 +573,20 @@ export default function ScannerPage() {
                       key={`${nft.contract}-${nft.tokenId}-${idx}`}
                       className="flex flex-col sm:flex-row sm:items-start gap-4 py-4 border-b border-foreground-faint/20 last:border-0"
                     >
-                      <div className="w-12 h-12 sm:w-16 sm:h-16 bg-foreground-faint/10 overflow-hidden shrink-0">
+                      <div className="w-12 h-12 sm:w-16 sm:h-16 bg-foreground-faint/10 overflow-hidden shrink-0 relative">
                         {thumb ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
+                          <Image
                             src={thumb}
                             alt={nft.title || "NFT"}
-                            className="w-full h-full object-cover transition-all duration-300"
-                            loading="lazy"
-                            referrerPolicy="no-referrer"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).style.display = "none";
-                            }}
+                            fill
+                            sizes="64px"
+                            className="object-cover"
+                            unoptimized
                           />
                         ) : (
-                           <div className="w-full h-full flex items-center justify-center text-foreground-faint/30 font-bold">IMG</div>
+                          <div className="w-full h-full flex items-center justify-center text-foreground-faint/30 font-bold">
+                            IMG
+                          </div>
                         )}
                       </div>
 
