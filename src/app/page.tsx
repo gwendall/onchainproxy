@@ -15,7 +15,7 @@ export default function Home() {
           Designed for thumbnails, wallets, and UI.
         </p>
         <p className="mt-3 text-foreground-muted">
-          Built for the EVM. Currently supports Ethereum only. L2s coming.
+          Built for the EVM. Currently supports Ethereum only.
         </p>
         <div className="mt-10 space-y-3">
           <h2 className="font-bold">Why NFTProxy exists</h2>
@@ -26,10 +26,13 @@ export default function Home() {
             caching do the heavy lifting.
           </p>
           <p className="text-foreground-muted">
-            Big picture: a lot of NFT UX depends on centralized indexers / marketplace APIs. When one goes down (or
+            Big picture: much of NFT UX depends on centralized indexers and marketplace APIs. When one goes down (or
             sunsets), it can domino into many apps. I built NFTProxy after relying on Reservoir for UI images — when their
             API shut down, my apps suddenly lost data. This proxy helps make interfaces more resilient by always falling
             back to on-chain truth, with cacheable HTTP as the “distribution layer”.
+          </p>
+          <p className="text-foreground-muted">
+            Non-goals: indexing, persistence, analytics, ownership history, or marketplace APIs.
           </p>
         </div>
 
@@ -186,7 +189,16 @@ export default function Home() {
         >
           Gwendall
         </a>
-        .
+        .{" "}
+        {/* <a
+          href="https://github.com/gwendall/nftproxy"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-link hover:underline font-bold"
+        >
+          Open-source
+        </a>
+        {" "}(MIT license). */}
       </footer>
     </main>
   );
