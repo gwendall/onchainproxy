@@ -88,58 +88,69 @@ const resetNftScan = (n: NftItem): NftItem => ({
   imageStatus: undefined,
 });
 
-const getRestoredSession = (): { session: ScannerSession; nfts: NftItem[]; shouldResume: boolean } | null => {
-  if (typeof window === "undefined") return null;
-  try {
-    const lastRaw = window.localStorage.getItem(lastSessionKey);
-    if (!lastRaw) return null;
-
-    const last = JSON.parse(lastRaw) as { target?: string; chain?: SupportedChain };
-    if (!last?.target || !last?.chain) return null;
-
-    const raw = window.localStorage.getItem(sessionKey(last.target, last.chain));
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as ScannerSession;
-    if (!parsed.target || !parsed.resolvedAddress || !Array.isArray(parsed.nfts)) return null;
-
-    const restoredNfts = parsed.nfts.map((n) =>
-      n.status === "scanning" ? { ...n, status: "pending" as const } : n
-    );
-
-    return {
-      session: parsed,
-      nfts: restoredNfts,
-      shouldResume: restoredNfts.some((n) => n.status === "pending"),
-    };
-  } catch {
-    return null;
-  }
-};
-
 export default function ScannerPage() {
-  const restored = useMemo(() => getRestoredSession(), []);
-  
-  const [input, setInput] = useState(restored?.session.target ?? "");
-  const [selectedChain, setSelectedChain] = useState<SupportedChain>(restored?.session.chain ?? "eth");
-  const [submittedTarget, setSubmittedTarget] = useState(restored?.session.target ?? "");
-  const [submittedAddress, setSubmittedAddress] = useState(restored?.session.resolvedAddress ?? "");
-  const [submittedChain, setSubmittedChain] = useState<SupportedChain>(restored?.session.chain ?? "eth");
-  const [nfts, setNfts] = useState<NftItem[]>(restored?.nfts ?? []);
+  const [input, setInput] = useState("");
+  const [selectedChain, setSelectedChain] = useState<SupportedChain>("eth");
+  const [submittedTarget, setSubmittedTarget] = useState("");
+  const [submittedAddress, setSubmittedAddress] = useState("");
+  const [submittedChain, setSubmittedChain] = useState<SupportedChain>("eth");
+  const [nfts, setNfts] = useState<NftItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
-  const [scanStartedAt, setScanStartedAt] = useState<number | null>(restored?.session.scanStartedAt ?? null);
-  const [scanEndedAt, setScanEndedAt] = useState<number | null>(restored?.session.scanEndedAt ?? null);
+  const [scanStartedAt, setScanStartedAt] = useState<number | null>(null);
+  const [scanEndedAt, setScanEndedAt] = useState<number | null>(null);
   const cancelRef = useRef(false);
   const runIdRef = useRef(0);
   const autoScanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const needsAutoScanRef = useRef(restored?.shouldResume ?? false);
+  const needsAutoScanRef = useRef(false);
   const nftsRef = useRef(nfts);
+  const didRestoreRef = useRef(false);
   
-  // Keep ref in sync with state (must be in effect, not during render)
+  // Keep ref in sync with state
   useEffect(() => {
     nftsRef.current = nfts;
   }, [nfts]);
+
+  // Restore session from localStorage after hydration (runs once)
+  useEffect(() => {
+    if (didRestoreRef.current) return;
+    didRestoreRef.current = true;
+    
+    // Schedule outside synchronous effect to satisfy lint rule
+    requestAnimationFrame(() => {
+      try {
+        const lastRaw = window.localStorage.getItem(lastSessionKey);
+        if (!lastRaw) return;
+
+        const last = JSON.parse(lastRaw) as { target?: string; chain?: SupportedChain };
+        if (!last?.target || !last?.chain) return;
+
+        const raw = window.localStorage.getItem(sessionKey(last.target, last.chain));
+        if (!raw) return;
+
+        const parsed = JSON.parse(raw) as ScannerSession;
+        if (!parsed.target || !parsed.resolvedAddress || !Array.isArray(parsed.nfts)) return;
+
+        const restoredNfts = parsed.nfts.map((n) =>
+          n.status === "scanning" ? { ...n, status: "pending" as const } : n
+        );
+
+        setInput(parsed.target);
+        setSelectedChain(parsed.chain);
+        setSubmittedTarget(parsed.target);
+        setSubmittedAddress(parsed.resolvedAddress);
+        setSubmittedChain(parsed.chain);
+        setNfts(restoredNfts);
+        setScanStartedAt(parsed.scanStartedAt ?? null);
+        setScanEndedAt(parsed.scanEndedAt ?? null);
+        
+        // Mark for auto-resume if there are pending items
+        needsAutoScanRef.current = restoredNfts.some((n) => n.status === "pending");
+      } catch {
+        // Ignore restore errors
+      }
+    });
+  }, []);
 
   const stats = useMemo(() => {
     const total = nfts.length;
@@ -727,3 +738,4 @@ export default function ScannerPage() {
     </main>
   );
 }
+
