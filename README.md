@@ -2,7 +2,7 @@
 
 Developer-friendly endpoints to fetch **EVM NFT metadata** and **images** without worrying about IPFS, CORS, remote domains, or flaky RPCs.
 
-Currently: **Ethereum only** (use `eth`). L2s coming.
+Currently: **Ethereum + major L2s**.
 
 It:
 - resolves `tokenURI()` / `uri()` (ERC-721 + ERC-1155)
@@ -17,7 +17,7 @@ It:
 
 ## How it works (high level)
 
-- Resolves `tokenURI()` (ERC-721) or `uri()` (ERC-1155) on **Ethereum** via JSON-RPC `eth_call` (tries multiple RPCs).
+- Resolves `tokenURI()` (ERC-721) or `uri()` (ERC-1155) on the selected chain via JSON-RPC `eth_call` (tries multiple RPCs).
 - Fetches and parses the token metadata JSON (supports `data:` and IPFS).
 - Extracts the best `image*` field, resolves IPFS, then either:
   - returns the original (`raw=1`)
@@ -36,22 +36,22 @@ pnpm dev
   - `GET /:chain/:contract/:tokenId`
   - Returns: JSON (includes resolved `metadataUrl`, parsed `metadata`, and `imageUrl` when available)
   - Path:
-    - `chain`: currently `eth` (Ethereum). L2s coming.
+    - `chain`: one of `eth`, `arb`, `op`, `base`, `polygon`, `zksync`, `linea`, `scroll`, `zkevm`
   - Query:
-    - `rpcUrl`: override the Ethereum RPC URL (optional)
+    - `rpcUrl`: override the RPC URL (optional)
     - `debug=1`: extra error details (dev only)
 
 - **Image**
   - `GET /:chain/:contract/:tokenId/image`
   - Returns: `image/webp` **when possible** (thumbnail-optimized). Falls back to the original format when WebP transform is not available.
   - Path:
-    - `chain`: currently `eth` (Ethereum). L2s coming.
+    - `chain`: one of `eth`, `arb`, `op`, `base`, `polygon`, `zksync`, `linea`, `scroll`, `zkevm`
   - Query:
     - `raw=1`: return the original image (no resize / no WebP). For remote URLs this is a 302 redirect; for `data:` URLs this returns the raw bytes.
     - `svg=1`: **SVG escape hatch**. Keep SVG as SVG (vector) while still proxying it from this origin (no WebP rasterization). This exists for the niche case where you want same-origin SVG bytes without a redirect. (If you don’t care, ignore it.)
     - `w`, `h`: max resize bounds (default 512, min 16, max 2048)
     - `q`: WebP quality (default 70, min 30, max 90)
-    - `rpcUrl`: override the Ethereum RPC URL (optional)
+    - `rpcUrl`: override the RPC URL (optional)
     - `debug=1`: extra error details (dev only)
 
 ## Examples (Meebits)
@@ -70,7 +70,18 @@ Responses are cache-friendly:
 
 ## Config (env)
 
-- **`NFT_RPC_URLS`**: comma-separated Ethereum RPC URLs (optional)
-- **`NFT_RPC_URL`**: single Ethereum RPC URL (optional)
+- **Per-chain (preferred)**:
+  - **`NFT_RPC_URLS_ETH`**, **`NFT_RPC_URL_ETH`**
+  - **`NFT_RPC_URLS_ARB`**, **`NFT_RPC_URL_ARB`**
+  - **`NFT_RPC_URLS_OP`**, **`NFT_RPC_URL_OP`**
+  - **`NFT_RPC_URLS_BASE`**, **`NFT_RPC_URL_BASE`**
+  - **`NFT_RPC_URLS_POLYGON`**, **`NFT_RPC_URL_POLYGON`**
+  - **`NFT_RPC_URLS_ZKSYNC`**, **`NFT_RPC_URL_ZKSYNC`**
+  - **`NFT_RPC_URLS_LINEA`**, **`NFT_RPC_URL_LINEA`**
+  - **`NFT_RPC_URLS_SCROLL`**, **`NFT_RPC_URL_SCROLL`**
+  - **`NFT_RPC_URLS_ZKEVM`**, **`NFT_RPC_URL_ZKEVM`**
+- **Global (backwards-compatible fallback)**:
+  - **`NFT_RPC_URLS`**: comma-separated RPC URLs (applies to all chains)
+  - **`NFT_RPC_URL`**: single RPC URL (applies to all chains)
 - **`IPFS_GATEWAY`**: IPFS gateway base (default `https://ipfs.io/ipfs`)
 - **`NEXT_PUBLIC_SITE_URL`** or **`SITE_URL`**: base URL used for metadata (default `http://localhost:3000`)

@@ -1,4 +1,5 @@
 import { Section } from "@/components/Section";
+import { SUPPORTED_CHAINS } from "@/lib/nft/chain";
 
 export default function Home() {
   const chain = "eth";
@@ -16,14 +17,33 @@ export default function Home() {
           <p className="text-foreground-muted">
             Stable, cache-friendly URLs for NFT images and metadata. Designed for thumbnails, wallets, and UI.
           </p>
-          <p className="text-foreground-muted">Built for the EVM. Currently supports Ethereum only.</p>
+          <p className="text-foreground-muted">Built for the EVM. Supports Ethereum + major L2s.</p>
         </header>
+
+        <Section title="Supported chains">
+          <p className="text-foreground-muted">
+            Use any of these in the path as <span className="text-foreground">/:chain</span>:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {SUPPORTED_CHAINS.map((c) => (
+              <span
+                key={c}
+                className="px-2 py-1 rounded border border-foreground-faint/30 text-foreground"
+              >
+                {c}
+              </span>
+            ))}
+          </div>
+          <p className="text-foreground-faint">
+            Tip: you can still override RPC per-request with <span className="text-foreground">?rpcUrl=...</span>.
+          </p>
+        </Section>
 
         <Section title="Why NFTProxy exists">
           <p className="text-foreground-muted">
             Fetching NFT images is slow, flaky, and inconsistent (IPFS gateways, huge images, random hosts, on-chain data
             URLs). The naive solution is an indexer + a database. This is the opposite: a tiny origin that resolves the
-            freshest tokenURI/uri from Ethereum at request time, then lets caching
+            freshest tokenURI/uri from chain RPC at request time, then lets caching
             do the heavy lifting.
           </p>
         </Section>
@@ -42,7 +62,7 @@ export default function Home() {
 
         <Section title="What it does">
           <ul className="list-disc pl-5 space-y-1 text-foreground-muted">
-            <li>Resolves on-chain metadata at request time (read-only Ethereum RPC calls).</li>
+            <li>Resolves on-chain metadata at request time (read-only EVM JSON-RPC calls).</li>
             <li>Normalizes URIs (IPFS + data URLs) into a cacheable HTTP response.</li>
             <li>
               Uniformizes images for UI: returns WebP thumbnails when possible (size/quality) so interfaces stay fast and
@@ -121,6 +141,11 @@ export default function Home() {
               </a>
             </li>
           </ul>
+          <p className="mt-3 text-foreground-faint">
+            For L2s, just swap <span className="text-foreground">/{chain}/</span> with e.g.{" "}
+            <span className="text-foreground">/arb/</span>, <span className="text-foreground">/op/</span>,{" "}
+            <span className="text-foreground">/base/</span>, <span className="text-foreground">/polygon/</span>, etc.
+          </p>
         </Section>
 
         <Section title="Query params">
@@ -129,11 +154,11 @@ export default function Home() {
               <div className="text-foreground">GET /:chain/:contract/:tokenId</div>
               <ul className="mt-1 list-disc pl-5 space-y-1">
                 <li>
-                  <span className="text-foreground">chain</span>: currently{" "}
-                  <span className="text-foreground">eth</span> (Ethereum).
+                  <span className="text-foreground">chain</span>: one of{" "}
+                  <span className="text-foreground">{SUPPORTED_CHAINS.join(", ")}</span>.
                 </li>
                 <li>
-                  <span className="text-foreground">rpcUrl</span>: override the Ethereum RPC URL (optional)
+                  <span className="text-foreground">rpcUrl</span>: override the chain RPC URL (optional)
                 </li>
                 <li>
                   <span className="text-foreground">debug=1</span>: extra error details (dev only)
@@ -145,8 +170,8 @@ export default function Home() {
               <div className="text-foreground">GET /:chain/:contract/:tokenId/image</div>
               <ul className="mt-1 list-disc pl-5 space-y-1">
                 <li>
-                  <span className="text-foreground">chain</span>: currently{" "}
-                  <span className="text-foreground">eth</span> (Ethereum).
+                  <span className="text-foreground">chain</span>: one of{" "}
+                  <span className="text-foreground">{SUPPORTED_CHAINS.join(", ")}</span>.
                 </li>
                 <li>
                   <span className="text-foreground">raw=1</span>: return the original image (no resize / no WebP)
@@ -164,7 +189,7 @@ export default function Home() {
                   <span className="text-foreground">q</span>: WebP quality (default 70, min 30, max 90)
                 </li>
                 <li>
-                  <span className="text-foreground">rpcUrl</span>: override the Ethereum RPC URL (optional)
+                  <span className="text-foreground">rpcUrl</span>: override the chain RPC URL (optional)
                 </li>
                 <li>
                   <span className="text-foreground">debug=1</span>: extra error details (dev only)

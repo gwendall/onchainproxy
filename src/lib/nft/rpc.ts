@@ -16,7 +16,49 @@ const defaultRpcUrlsByChain: Record<SupportedChain, string[]> = {
     "https://1rpc.io/eth",
     "https://cloudflare-eth.com",
   ],
+  arb: [
+    "https://arbitrum-one.publicnode.com",
+    "https://arb1.arbitrum.io/rpc",
+    "https://arbitrum.llamarpc.com",
+    "https://1rpc.io/arb",
+  ],
+  op: [
+    "https://optimism.publicnode.com",
+    "https://mainnet.optimism.io",
+    "https://optimism.llamarpc.com",
+    "https://1rpc.io/op",
+  ],
+  base: [
+    "https://base.publicnode.com",
+    "https://mainnet.base.org",
+    "https://base.llamarpc.com",
+    "https://1rpc.io/base",
+  ],
+  polygon: [
+    "https://polygon-bor.publicnode.com",
+    "https://polygon-rpc.com",
+    "https://polygon.llamarpc.com",
+    "https://1rpc.io/matic",
+  ],
+  zksync: [
+    "https://mainnet.era.zksync.io",
+    "https://zksync-era.publicnode.com",
+  ],
+  linea: [
+    "https://rpc.linea.build",
+    "https://linea.publicnode.com",
+  ],
+  scroll: [
+    "https://rpc.scroll.io",
+    "https://scroll.publicnode.com",
+  ],
+  zkevm: [
+    "https://zkevm-rpc.com",
+    "https://polygon-zkevm.publicnode.com",
+  ],
 };
+
+const envKeyForChain = (chain: SupportedChain) => chain.toUpperCase();
 
 const getRpcUrls = (rpcUrlQuery: string | null, chain: SupportedChain) => {
   const unique: string[] = [];
@@ -27,9 +69,24 @@ const getRpcUrls = (rpcUrlQuery: string | null, chain: SupportedChain) => {
 
   if (typeof rpcUrlQuery === "string" && rpcUrlQuery.length > 0) add(rpcUrlQuery);
 
-  const env = process.env.NFT_RPC_URLS || process.env.NFT_RPC_URL;
-  if (typeof env === "string" && env.length > 0) {
-    for (const u of env.split(",").map((s) => s.trim()).filter((s) => s.length > 0)) add(u);
+  // Chain-specific env (preferred): NFT_RPC_URLS_ARB / NFT_RPC_URL_ARB, etc.
+  {
+    const suffix = envKeyForChain(chain);
+    const env =
+      process.env[`NFT_RPC_URLS_${suffix}`]
+      || process.env[`NFT_RPC_URL_${suffix}`]
+      || "";
+    if (typeof env === "string" && env.length > 0) {
+      for (const u of env.split(",").map((s) => s.trim()).filter((s) => s.length > 0)) add(u);
+    }
+  }
+
+  // Backwards-compatible/global env (applies to all chains when set).
+  {
+    const env = process.env.NFT_RPC_URLS || process.env.NFT_RPC_URL || "";
+    if (typeof env === "string" && env.length > 0) {
+      for (const u of env.split(",").map((s) => s.trim()).filter((s) => s.length > 0)) add(u);
+    }
   }
 
   for (const u of defaultRpcUrlsByChain[chain]) add(u);

@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import type { NextRequest } from "next/server";
 
-import { normalizeChain } from "@/lib/nft/chain";
+import { normalizeChain, supportedChainsHint } from "@/lib/nft/chain";
 import { computeWeakEtag, maybeNotModified } from "@/lib/nft/etag";
 import { jsonError, setCacheControl } from "@/lib/nft/http";
 import { resolveNftMetadata } from "@/lib/nft/metadata";
@@ -43,7 +43,7 @@ export const GET = async (
       tokenId: string;
     };
     const chain = normalizeChain(rawChain);
-    if (!chain) return jsonError(400, "Unsupported chain (use /eth/...)");
+    if (!chain) return jsonError(400, `Unsupported chain (use ${supportedChainsHint()})`);
 
     const contract = decodeURIComponent(rawContract).trim();
     const tokenId = decodeURIComponent(rawTokenId).trim();
