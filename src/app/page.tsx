@@ -8,9 +8,10 @@ export default function Home() {
   return (
     <main className="min-h-screen max-w-2xl mx-auto px-6 py-8 font-mono">
       <header className="mb-12">
-        <h1 className="font-bold mb-3">NFT PROXY</h1>
+        <h1 className="font-bold mb-3">NFTProxy</h1>
         <p className="text-foreground-muted">
-          Lightweight endpoints for Ethereum NFT metadata + images - designed for thumbnails and UI.
+          Stable, cache-friendly URLs for NFT images and metadata.
+          Designed for thumbnails, wallets, and UI.
         </p>
         <p className="mt-3 text-foreground-muted">
           The problem: fetching NFT images is slow and flaky (IPFS gateways, huge images, random hosts). The naive
@@ -23,7 +24,7 @@ export default function Home() {
             RPC calls.
           </li>
           <li>
-            Extremely lightweight: no indexer, no database - just fetch, normalize, and return a stable URL per token.
+            Extremely lightweight: no indexer, no database — fetch, normalize, return a stable URL per token.
           </li>
           <li>Acts like a “hidden CDN”: ETag + Cache-Control enable fast edge/browser caching.</li>
         </ul>
@@ -31,6 +32,10 @@ export default function Home() {
 
       <section className="space-y-3">
         <h2 className="font-bold">Endpoints</h2>
+        <p className="text-foreground-muted">
+          Use NFT Proxy as the src for images or as a metadata fetcher — it resolves on-chain tokenURI at request time and
+          returns a cacheable HTTP response.
+        </p>
 
         <div className="space-y-2 text-foreground-muted">
           <div>
@@ -66,6 +71,28 @@ export default function Home() {
           Cache-friendly responses: <span className="text-foreground">ETag</span> +{" "}
           <span className="text-foreground">Cache-Control</span>.
         </p>
+      </section>
+
+      <section className="mt-10 space-y-3">
+        <h2 className="font-bold">Examples (Meebits)</h2>
+        <ul className="list-disc pl-5 space-y-1 text-foreground-muted">
+          <li>
+            <a
+              href={`/${meebitsContract}/${meebitsTokenId}`}
+              className="text-link hover:underline font-bold"
+            >
+              /{meebitsContract}/{meebitsTokenId}
+            </a>
+          </li>
+          <li>
+            <a
+              href={`/${meebitsContract}/${meebitsTokenId}/image?w=512&h=512&q=70`}
+              className="text-link hover:underline font-bold"
+            >
+              /{meebitsContract}/{meebitsTokenId}/image?w=512&h=512&q=70
+            </a>
+          </li>
+        </ul>
       </section>
 
       <section className="mt-10 space-y-3">
@@ -116,32 +143,10 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mt-10 space-y-3">
-        <h2 className="font-bold">Examples (Meebits)</h2>
-        <ul className="list-disc pl-5 space-y-1 text-foreground-muted">
-          <li>
-            <a
-              href={`/${meebitsContract}/${meebitsTokenId}`}
-              className="text-link hover:underline font-bold"
-            >
-              /{meebitsContract}/{meebitsTokenId}
-            </a>
-          </li>
-          <li>
-            <a
-              href={`/${meebitsContract}/${meebitsTokenId}/image?w=512&h=512&q=70`}
-              className="text-link hover:underline font-bold"
-            >
-              /{meebitsContract}/{meebitsTokenId}/image?w=512&h=512&q=70
-            </a>
-          </li>
-        </ul>
-      </section>
-
       <footer className="mt-12 text-foreground-muted">
         Made by{" "}
         <a
-          href="https://x.com/gwendall"
+          href="https://gwendall.com"
           target="_blank"
           rel="noopener noreferrer"
           className="text-link hover:underline font-bold"

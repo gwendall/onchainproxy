@@ -32,11 +32,11 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: siteUrl,
   title: {
-    default: "nft-proxy",
-    template: "%s | nft-proxy",
+    default: "NFTProxy",
+    template: "%s | NFTProxy",
   },
-  description: "NFT metadata + image proxy with smart caching.",
-  applicationName: "nft-proxy",
+  description: "Stable, cache-friendly URLs for NFT images and metadata.",
+  applicationName: "NFTProxy",
   keywords: [
     "Ethereum",
     "NFT",
@@ -52,17 +52,17 @@ export const metadata: Metadata = {
   authors: [{ name: "Gwendall" }],
   creator: "Gwendall",
   openGraph: {
-    title: "nft-proxy",
-    description: "NFT metadata + image proxy with smart caching.",
+    title: "NFTProxy",
+    description: "Stable, cache-friendly URLs for NFT images and metadata.",
     url: "/",
-    siteName: "nft-proxy",
+    siteName: "NFTProxy",
     locale: "en_US",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "nft-proxy",
-    description: "NFT metadata + image proxy with smart caching.",
+    title: "NFTProxy",
+    description: "Stable, cache-friendly URLs for NFT images and metadata.",
     creator: "@gwendall",
   },
   robots: {
