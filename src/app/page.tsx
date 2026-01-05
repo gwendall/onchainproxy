@@ -195,10 +195,10 @@ export default function Home() {
                   <span className="text-foreground">rpcUrl</span>: override the chain RPC URL (optional)
                 </li>
                 <li>
-                  <span className="text-foreground">debug=1</span>: extra error details (dev only)
+                  <span className="text-foreground">json=1</span>: return JSON on error (otherwise SVG fallback)
                 </li>
                 <li>
-                  <span className="text-foreground">json=1</span>: return JSON on error (otherwise SVG fallback)
+                  <span className="text-foreground">debug=1</span>: extra error details (dev only)
                 </li>
               </ul>
             </div>
