@@ -5,8 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, ArrowUpRight, RefreshCw, Check, X, AlertTriangle, Loader2 } from "lucide-react";
 import { Section } from "@/components/Section";
-import { checkNftStatus } from "@/app/scanner/actions";
-import { normalizeChain } from "@/lib/nft/chain";
+import { checkNftStatus, fetchNftInfo, type NftInfo } from "@/app/scanner/actions";
+import { normalizeChain, type SupportedChain } from "@/lib/nft/chain";
 import { use } from "react";
 
 type ErrorSource = "rpc" | "contract" | "metadata_fetch" | "parsing" | "image_fetch" | "unknown";
@@ -88,7 +88,8 @@ export default function TokenScanPage({
   const tokenId = decodeURIComponent(rawTokenId).trim();
 
   const [result, setResult] = useState<ScanResult>({ status: "idle" });
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [nftInfo, setNftInfo] = useState<NftInfo | null>(null);
+  const [nftInfoLoading, setNftInfoLoading] = useState(true);
 
   const runScan = useCallback(async () => {
     if (!chain) return;
@@ -120,17 +121,67 @@ export default function TokenScanPage({
     }
   }, [chain, contract, tokenId]);
 
-  // Fetch image URL from metadata endpoint
+  // Fetch NFT info from Alchemy (reliable source even if our endpoint is down)
   useEffect(() => {
-    if (!chain) return;
-    fetch(`/${chain}/${contract}/${tokenId}`)
-      .then((res) => res.ok ? res.json() : null)
-      .then((data) => {
-        if (data?.imageUrl) {
-          setImageUrl(data.imageUrl);
+    if (!chain) {
+      requestAnimationFrame(() => setNftInfoLoading(false));
+      return;
+    }
+    
+    let cancelled = false;
+    
+    const loadInfo = async () => {
+      try {
+        // Fetch from Alchemy first
+        const info = await fetchNftInfo(chain as SupportedChain, contract, tokenId);
+        if (cancelled) return;
+        
+        setNftInfo(info);
+        setNftInfoLoading(false);
+        
+        // Also try our endpoint to supplement missing info
+        if (!info.imageUrl) {
+          try {
+            const res = await fetch(`/${chain}/${contract}/${tokenId}`);
+            if (res.ok && !cancelled) {
+              const data = await res.json();
+              if (data?.imageUrl) {
+                setNftInfo((prev) => prev ? { ...prev, imageUrl: data.imageUrl } : prev);
+              }
+            }
+          } catch {
+            // Ignore
+          }
         }
-      })
-      .catch(() => {});
+      } catch {
+        if (cancelled) return;
+        setNftInfoLoading(false);
+        
+        // Fallback to our endpoint
+        try {
+          const res = await fetch(`/${chain}/${contract}/${tokenId}`);
+          if (res.ok && !cancelled) {
+            const data = await res.json();
+            if (data) {
+              setNftInfo({
+                title: data.name,
+                collection: data.collection,
+                imageUrl: data.imageUrl,
+                exists: true,
+              });
+            }
+          }
+        } catch {
+          // Ignore
+        }
+      }
+    };
+    
+    void loadInfo();
+    
+    return () => {
+      cancelled = true;
+    };
   }, [chain, contract, tokenId]);
 
   // Auto-scan on mount
@@ -179,15 +230,19 @@ export default function TokenScanPage({
           <div className="flex flex-col sm:flex-row gap-6">
             {/* Token Image */}
             <div className="w-32 h-32 sm:w-40 sm:h-40 bg-foreground-faint/10 overflow-hidden shrink-0 relative rounded-lg">
-              {imageUrl ? (
+              {nftInfo?.imageUrl ? (
                 <Image
-                  src={imageUrl}
-                  alt={`Token #${tokenId}`}
+                  src={nftInfo.imageUrl}
+                  alt={nftInfo.title || `Token #${tokenId}`}
                   fill
                   sizes="160px"
                   className="object-cover"
                   unoptimized
                 />
+              ) : nftInfoLoading ? (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-foreground-faint/50" />
+                </div>
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-foreground-faint/30 font-bold text-lg">
                   NFT
@@ -197,18 +252,41 @@ export default function TokenScanPage({
 
             {/* Token Info */}
             <div className="flex-1 space-y-3">
-              <div className="space-y-1">
-                <div className="text-foreground-faint text-sm">Chain</div>
-                <div className="text-foreground font-bold">{chainDisplayName(chain)}</div>
+              {/* Title & Collection (from Alchemy) */}
+              {(nftInfo?.title || nftInfo?.collection) && (
+                <div className="space-y-1">
+                  {nftInfo.title && (
+                    <div className="text-foreground font-bold text-lg">{nftInfo.title}</div>
+                  )}
+                  {nftInfo.collection && (
+                    <div className="text-foreground-muted">{nftInfo.collection}</div>
+                  )}
+                </div>
+              )}
+              
+              {/* Existence indicator */}
+              {!nftInfoLoading && nftInfo && !nftInfo.exists && (
+                <div className="text-yellow-500 text-sm flex items-center gap-1">
+                  <AlertTriangle className="w-4 h-4" />
+                  Token may not exist on this contract
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-x-6 gap-y-2">
+                <div className="space-y-0.5">
+                  <div className="text-foreground-faint text-xs uppercase">Chain</div>
+                  <div className="text-foreground font-bold">{chainDisplayName(chain)}</div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-foreground-faint text-xs uppercase">Contract</div>
+                  <div className="text-foreground font-mono" title={contract}>{shortAddress(contract)}</div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-foreground-faint text-xs uppercase">Token ID</div>
+                  <div className="text-foreground font-mono truncate max-w-[200px]" title={tokenId}>#{tokenId}</div>
+                </div>
               </div>
-              <div className="space-y-1">
-                <div className="text-foreground-faint text-sm">Contract</div>
-                <div className="text-foreground font-mono" title={contract}>{shortAddress(contract)}</div>
-              </div>
-              <div className="space-y-1">
-                <div className="text-foreground-faint text-sm">Token ID</div>
-                <div className="text-foreground font-mono truncate max-w-[200px]" title={tokenId}>#{tokenId}</div>
-              </div>
+              
               <div className="flex flex-wrap gap-3 pt-2">
                 <a
                   href={`https://opensea.io/assets/${openSeaChainSlug(chain)}/${contract}/${tokenId}`}

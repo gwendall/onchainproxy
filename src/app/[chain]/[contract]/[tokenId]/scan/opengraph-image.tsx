@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
-import { normalizeChain } from "@/lib/nft/chain";
+import { Alchemy, Network } from "alchemy-sdk";
+import { normalizeChain, type SupportedChain } from "@/lib/nft/chain";
 
 export const runtime = "nodejs";
 
@@ -32,6 +33,17 @@ const shortAddress = (addr: string) => {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
 };
 
+const alchemyNetworkForChain = (chain: SupportedChain): Network | null => {
+  switch (chain) {
+    case "eth": return Network.ETH_MAINNET;
+    case "arb": return Network.ARB_MAINNET;
+    case "op": return Network.OPT_MAINNET;
+    case "base": return Network.BASE_MAINNET;
+    case "polygon": return Network.MATIC_MAINNET;
+    default: return null;
+  }
+};
+
 const ScanLogo = () => {
   const stroke = "white";
   return (
@@ -52,6 +64,70 @@ const ScanLogo = () => {
   );
 };
 
+type NftInfo = {
+  title?: string;
+  collection?: string;
+  imageUrl?: string;
+};
+
+async function fetchNftInfoFromAlchemy(
+  chain: SupportedChain,
+  contract: string,
+  tokenId: string
+): Promise<NftInfo | null> {
+  const network = alchemyNetworkForChain(chain);
+  if (!network) return null;
+
+  const apiKey = process.env.ALCHEMY_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const alchemy = new Alchemy({ apiKey, network });
+    const nft = await alchemy.nft.getNftMetadata(contract, tokenId);
+
+    const title = nft.name || nft.raw?.metadata?.name || undefined;
+    const collection =
+      nft.collection?.name ||
+      nft.contract?.openSeaMetadata?.collectionName ||
+      nft.contract?.name ||
+      undefined;
+    const imageUrl =
+      nft.image?.thumbnailUrl ||
+      nft.image?.cachedUrl ||
+      nft.image?.pngUrl ||
+      nft.image?.originalUrl ||
+      (typeof nft.raw?.metadata?.image === "string" ? nft.raw.metadata.image : undefined) ||
+      undefined;
+
+    return { title, collection, imageUrl };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchImageData(url: string): Promise<ArrayBuffer | null> {
+  // Normalize IPFS URLs
+  let fetchUrl = url;
+  if (url.startsWith("ipfs://ipfs/")) {
+    fetchUrl = `https://ipfs.io/ipfs/${url.slice("ipfs://ipfs/".length)}`;
+  } else if (url.startsWith("ipfs://")) {
+    fetchUrl = `https://ipfs.io/ipfs/${url.slice("ipfs://".length)}`;
+  }
+
+  try {
+    const res = await fetch(fetchUrl, {
+      headers: { "User-Agent": "OnChainProxy/1.0" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.ok) {
+      return await res.arrayBuffer();
+    }
+  } catch {
+    // Fetch failed
+  }
+  return null;
+}
+
 export default async function Image({
   params,
 }: {
@@ -63,42 +139,40 @@ export default async function Image({
   const contract = decodeURIComponent(rawContract).trim();
   const tokenId = decodeURIComponent(rawTokenId).trim();
 
-  // Try to fetch the NFT image
-  let imageUrl: string | null = null;
+  let nftInfo: NftInfo = {};
   let imageData: ArrayBuffer | null = null;
   
   if (chain) {
+    // 1. Try Alchemy first to get NFT info (works even if our service is down)
+    const alchemyInfo = await fetchNftInfoFromAlchemy(chain, contract, tokenId);
+    if (alchemyInfo) {
+      nftInfo = alchemyInfo;
+    }
+
+    // 2. Try our endpoint as a fallback/supplement
     try {
-      // First get metadata to find image URL
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL 
-        ? `https://${process.env.VERCEL_URL}` 
-        : "http://localhost:3000";
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
       
       const metadataRes = await fetch(`${baseUrl}/${chain}/${contract}/${tokenId}`, {
         next: { revalidate: 3600 },
+        signal: AbortSignal.timeout(5000),
       });
       
       if (metadataRes.ok) {
         const metadata = await metadataRes.json();
-        imageUrl = metadata?.imageUrl;
-        
-        // If we have an image URL, try to fetch it
-        if (imageUrl) {
-          try {
-            const imgRes = await fetch(imageUrl, {
-              headers: { "User-Agent": "OnChainProxy/1.0" },
-              signal: AbortSignal.timeout(5000),
-            });
-            if (imgRes.ok) {
-              imageData = await imgRes.arrayBuffer();
-            }
-          } catch {
-            // Image fetch failed, will use fallback
-          }
-        }
+        // Fill in any missing info from our endpoint
+        if (!nftInfo.title && metadata?.name) nftInfo.title = metadata.name;
+        if (!nftInfo.collection && metadata?.collection) nftInfo.collection = metadata.collection;
+        if (!nftInfo.imageUrl && metadata?.imageUrl) nftInfo.imageUrl = metadata.imageUrl;
       }
     } catch {
-      // Metadata fetch failed, will use fallback
+      // Our endpoint failed, but we might still have Alchemy data
+    }
+
+    // 3. Try to fetch the actual image
+    if (nftInfo.imageUrl) {
+      imageData = await fetchImageData(nftInfo.imageUrl);
     }
   }
 
@@ -210,53 +284,105 @@ export default async function Image({
             </div>
           </div>
 
-          {/* Contract */}
-          <div
-            style={{
-              display: "flex",
-              color: "rgba(255,255,255,0.5)",
-              fontSize: "24px",
-              fontFamily: "ui-monospace, monospace",
-              marginBottom: "12px",
-            }}
-          >
-            Contract
-          </div>
-          <div
-            style={{
-              display: "flex",
-              color: "white",
-              fontSize: "36px",
-              fontFamily: "ui-monospace, monospace",
-              fontWeight: 600,
-              marginBottom: "32px",
-            }}
-          >
-            {shortAddress(contract)}
-          </div>
+          {/* Title (if available) */}
+          {nftInfo.title ? (
+            <div
+              style={{
+                display: "flex",
+                color: "white",
+                fontSize: "42px",
+                fontFamily: "ui-monospace, monospace",
+                fontWeight: 700,
+                marginBottom: "8px",
+              }}
+            >
+              {nftInfo.title.length > 24 ? nftInfo.title.slice(0, 24) + "…" : nftInfo.title}
+            </div>
+          ) : null}
 
-          {/* Token ID */}
+          {/* Collection (if available) */}
+          {nftInfo.collection ? (
+            <div
+              style={{
+                display: "flex",
+                color: "rgba(255,255,255,0.6)",
+                fontSize: "26px",
+                fontFamily: "ui-monospace, monospace",
+                marginBottom: "24px",
+              }}
+            >
+              {nftInfo.collection.length > 30 ? nftInfo.collection.slice(0, 30) + "…" : nftInfo.collection}
+            </div>
+          ) : null}
+
+          {/* Contract + Token ID row */}
           <div
             style={{
               display: "flex",
-              color: "rgba(255,255,255,0.5)",
-              fontSize: "24px",
-              fontFamily: "ui-monospace, monospace",
-              marginBottom: "12px",
+              alignItems: "center",
+              gap: "24px",
+              marginTop: nftInfo.title || nftInfo.collection ? "auto" : "0",
             }}
           >
-            Token ID
-          </div>
-          <div
-            style={{
-              display: "flex",
-              color: "white",
-              fontSize: "48px",
-              fontFamily: "ui-monospace, monospace",
-              fontWeight: 700,
-            }}
-          >
-            #{tokenId.length > 10 ? tokenId.slice(0, 10) + "..." : tokenId}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  color: "rgba(255,255,255,0.4)",
+                  fontSize: "18px",
+                  fontFamily: "ui-monospace, monospace",
+                  marginBottom: "4px",
+                }}
+              >
+                Contract
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  color: "rgba(255,255,255,0.8)",
+                  fontSize: "24px",
+                  fontFamily: "ui-monospace, monospace",
+                  fontWeight: 500,
+                }}
+              >
+                {shortAddress(contract)}
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  color: "rgba(255,255,255,0.4)",
+                  fontSize: "18px",
+                  fontFamily: "ui-monospace, monospace",
+                  marginBottom: "4px",
+                }}
+              >
+                Token
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  color: "rgba(255,255,255,0.8)",
+                  fontSize: "24px",
+                  fontFamily: "ui-monospace, monospace",
+                  fontWeight: 500,
+                }}
+              >
+                #{tokenId.length > 12 ? tokenId.slice(0, 12) + "…" : tokenId}
+              </div>
+            </div>
           </div>
         </div>
       </div>

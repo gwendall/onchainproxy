@@ -233,6 +233,46 @@ export type NftStatusResult = {
   imageErrorSource?: ErrorSource;
 };
 
+export type NftInfo = {
+  title?: string;
+  collection?: string;
+  imageUrl?: string;
+  exists: boolean;
+};
+
+export async function fetchNftInfo(chain: SupportedChain, contract: string, tokenId: string): Promise<NftInfo> {
+  const network = alchemyNetworkForChain(chain);
+  if (!network) {
+    return { exists: false };
+  }
+
+  try {
+    const alchemy = getAlchemy(chain);
+    const nft = await alchemy.nft.getNftMetadata(contract, tokenId);
+
+    // Check if the NFT exists (Alchemy returns empty data for non-existent tokens)
+    const exists = !!(nft.name || nft.raw?.metadata || nft.image?.originalUrl);
+
+    const title = nft.name || nft.raw?.metadata?.name || undefined;
+    const collection =
+      nft.collection?.name ||
+      nft.contract?.openSeaMetadata?.collectionName ||
+      nft.contract?.name ||
+      undefined;
+    const imageUrl =
+      nft.image?.thumbnailUrl ||
+      nft.image?.cachedUrl ||
+      nft.image?.pngUrl ||
+      nft.image?.originalUrl ||
+      (typeof nft.raw?.metadata?.image === "string" ? nft.raw.metadata.image : undefined) ||
+      undefined;
+
+    return { title, collection, imageUrl, exists };
+  } catch {
+    return { exists: false };
+  }
+}
+
 export async function checkNftStatus(chain: string, contract: string, tokenId: string): Promise<NftStatusResult> {
   let metadataResult;
   
