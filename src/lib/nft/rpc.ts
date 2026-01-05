@@ -7,6 +7,17 @@ import type { SupportedChain } from "@/lib/nft/chain";
 const ERC721_ABI = ["function tokenURI(uint256 tokenId) view returns (string)"];
 const ERC1155_ABI = ["function uri(uint256 id) view returns (string)"];
 
+// CryptoPunks are pre-ERC721.
+// Users may reference either:
+// - the original CryptoPunks contract (legacy, no tokenURI)
+// - the CryptoPunksData contract (helper that exposes on-chain SVG + attributes)
+const CRYPTOPUNKS_ORIGINAL_CONTRACT = "0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb";
+const CRYPTOPUNKS_DATA_CONTRACT = "0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2";
+const PUNKS_DATA_ABI = [
+  "function punkImageSvg(uint16 index) view returns (string)",
+  "function punkAttributes(uint16 index) view returns (string)",
+];
+
 const defaultRpcUrlsByChain: Record<SupportedChain, string[]> = {
   eth: [
     "https://ethereum.publicnode.com",
@@ -103,6 +114,7 @@ const tokenUriCache = new LruTtlCache<string, string>({
 
 const erc721Iface = new ethers.utils.Interface(ERC721_ABI);
 const erc1155Iface = new ethers.utils.Interface(ERC1155_ABI);
+const punksDataIface = new ethers.utils.Interface(PUNKS_DATA_ABI);
 
 const fetchWithTimeout = async (url: string, init: RequestInit & { timeoutMs: number }) => {
   const controller = new AbortController();
@@ -163,6 +175,50 @@ const jsonRpcCall = async (params: {
   return json.result;
 };
 
+const isCryptoPunksSupportedContract = (contract: string) => {
+  const c = contract.trim().toLowerCase();
+  return c === CRYPTOPUNKS_ORIGINAL_CONTRACT || c === CRYPTOPUNKS_DATA_CONTRACT;
+};
+
+const toSvgDataUrl = (svgOrDataUrl: string) => {
+  const s = String(svgOrDataUrl ?? "").trim();
+  // Some implementations return a full data: URL already. If so, keep it as-is.
+  if (s.toLowerCase().startsWith("data:")) return s;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(s)}`;
+};
+
+const ethCallWithFallback = async (params: {
+  chain: SupportedChain;
+  rpcUrlQuery: string | null;
+  to: string;
+  data: string;
+  timeoutMs: number;
+}) => {
+  const rpcUrls = getRpcUrls(params.rpcUrlQuery, params.chain);
+  const attempts: Array<{ url: string; error: string }> = [];
+  let lastRpcError: unknown;
+
+  for (const url of rpcUrls) {
+    try {
+      const result = await jsonRpcCall({
+        rpcUrl: url,
+        method: "eth_call",
+        rpcParams: [{ to: params.to, data: params.data }, "latest"],
+        timeoutMs: params.timeoutMs,
+      });
+      if (typeof result !== "string") throw new Error("Bad RPC result");
+      return { result, rpcUrl: url };
+    } catch (e) {
+      lastRpcError = e;
+      attempts.push({ url, error: String(e) });
+    }
+  }
+
+  const error = new Error("RPC eth_call failed");
+  (error as unknown as { cause?: unknown }).cause = { last: lastRpcError, attempts };
+  throw error;
+};
+
 const isNetworkishError = (e: unknown) => {
   if (!(e instanceof Error)) return false;
   const msg = e.message.toLowerCase();
@@ -195,6 +251,67 @@ export const resolveTokenMetadataUri = async (params: {
   const cacheKey = `${params.chain}:${params.contract}:${params.tokenId.toString()}`;
   const cached = tokenUriCache.get(cacheKey, nowMs);
   if (cached) return { metadataUri: cached, rpcUrl: "cache" };
+
+  // CryptoPunks special-case (pre-ERC721).
+  if (params.chain === "eth" && isCryptoPunksSupportedContract(params.contract)) {
+    const id = (() => {
+      try {
+        // CryptoPunks are 0..9999, fits in uint16.
+        return params.tokenId.toNumber();
+      } catch {
+        return null;
+      }
+    })();
+    if (id === null || id < 0 || id > 9999) {
+      const err = new Error("Invalid CryptoPunks tokenId");
+      (err as unknown as { cause?: unknown }).cause = { tokenId: params.tokenId.toString() };
+      throw err;
+    }
+
+    const svgData = punksDataIface.encodeFunctionData("punkImageSvg", [id]);
+    const attrsData = punksDataIface.encodeFunctionData("punkAttributes", [id]);
+
+    const [{ result: svgCallRes, rpcUrl }, { result: attrsCallRes }] = await Promise.all([
+      ethCallWithFallback({
+        chain: params.chain,
+        rpcUrlQuery: params.rpcUrlQuery,
+        to: CRYPTOPUNKS_DATA_CONTRACT,
+        data: svgData,
+        timeoutMs: 10_000,
+      }),
+      ethCallWithFallback({
+        chain: params.chain,
+        rpcUrlQuery: params.rpcUrlQuery,
+        to: CRYPTOPUNKS_DATA_CONTRACT,
+        data: attrsData,
+        timeoutMs: 10_000,
+      }),
+    ]);
+
+    const svgDecoded = punksDataIface.decodeFunctionResult("punkImageSvg", svgCallRes);
+    const attrsDecoded = punksDataIface.decodeFunctionResult("punkAttributes", attrsCallRes);
+    const svg = String(svgDecoded[0] ?? "");
+    const attrsRaw = String(attrsDecoded[0] ?? "");
+
+    const attributes = attrsRaw
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+      .map((value) => ({ trait_type: "attribute", value }));
+
+    const image = toSvgDataUrl(svg);
+    const metadata = {
+      name: `CryptoPunk ${id}`,
+      description: "CryptoPunks (on-chain). Resolved via CryptoPunksData.",
+      image,
+      attributes,
+      external_url: `https://www.larvalabs.com/cryptopunks/details/${id}`,
+    };
+
+    const metadataUri = `data:application/json;utf8,${encodeURIComponent(JSON.stringify(metadata))}`;
+    tokenUriCache.set(cacheKey, metadataUri, params.cacheTtlMs, nowMs);
+    return { metadataUri, rpcUrl };
+  }
 
   const rpcUrls = getRpcUrls(params.rpcUrlQuery, params.chain);
 

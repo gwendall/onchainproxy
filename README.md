@@ -54,6 +54,18 @@ pnpm dev
     - `rpcUrl`: override the RPC URL (optional)
     - `debug=1`: extra error details (dev only)
 
+## Special cases
+
+- **CryptoPunks (pre-ERC721)**
+  - You can use either contract address in the URL:
+    - **CryptoPunks (original)**: `0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb`
+    - **CryptoPunksData (helper)**: `0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2`
+  - Under the hood, NFTProxy always reads the SVG + attributes from **CryptoPunksData**.
+  - Example:
+    - `GET /eth/0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb/0`
+    - `GET /eth/0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb/0/image?w=512`
+    - `GET /eth/0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2/0`
+
 ## Examples (Meebits)
 
 ```bash
