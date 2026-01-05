@@ -670,6 +670,12 @@ export default function ScannerPage() {
                           >
                             Raw image
                           </a>
+                          <Link
+                            href={`/${nft.chain}/${nft.contract}/${nft.tokenId}/scan`}
+                            className="shrink-0 text-foreground-faint/70 hover:text-foreground hover:underline transition-colors"
+                          >
+                            Details
+                          </Link>
                         </div>
                         
                         {(nft.error || nft.imageError) ? (
