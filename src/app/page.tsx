@@ -7,7 +7,7 @@ export default function Home() {
       <header className="mb-12">
         <h1 className="font-bold mb-3">NFT PROXY</h1>
         <p className="text-foreground-muted">
-          Lightweight endpoints for NFT metadata + images — designed for thumbnails and UI.
+          Lightweight endpoints for NFT metadata + images - designed for thumbnails and UI.
         </p>
         <p className="mt-3 text-foreground-muted">
           The problem: fetching NFT images is slow and flaky (IPFS gateways, huge images, random hosts). The naive
@@ -20,7 +20,7 @@ export default function Home() {
             RPC calls.
           </li>
           <li>
-            Extremely lightweight: no indexer, no database — just fetch, normalize, and return a stable URL per token.
+            Extremely lightweight: no indexer, no database - just fetch, normalize, and return a stable URL per token.
           </li>
           <li>Acts like a “hidden CDN”: ETag + Cache-Control enable fast edge/browser caching.</li>
         </ul>
