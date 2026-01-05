@@ -26,7 +26,7 @@ const siteUrl = (() => {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#fafafa",
+  themeColor: "#000000",
 };
 
 export const metadata: Metadata = {
@@ -64,6 +64,11 @@ export const metadata: Metadata = {
     title: "NFTProxy",
     description: "Stable, cache-friendly URLs for NFT images and metadata.",
     creator: "@gwendall",
+  },
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    shortcut: ["/favicon.svg"],
+    apple: [{ url: "/apple-icon", type: "image/png" }],
   },
   robots: {
     index: true,

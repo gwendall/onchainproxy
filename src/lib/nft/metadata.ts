@@ -97,7 +97,7 @@ export const resolveNftMetadata = async (params: {
     timeoutMs: 10_000,
     headers: {
       Accept: "application/json",
-      "User-Agent": "nft-api/1.0 (+https://vercel.com)",
+      "User-Agent": "nftproxy/1.0",
     },
     // Never rely on Next fetch caching for this: we cache at CDN + our own LRU.
     cache: "no-store",
