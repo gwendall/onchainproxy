@@ -31,7 +31,7 @@ pnpm dev
 ## Endpoints (HTTP)
 
 - **Metadata**
-  - `GET /:contract/:tokenId/metadata`
+  - `GET /:contract/:tokenId`
   - Returns: JSON (includes resolved `metadataUrl`, parsed `metadata`, and `imageUrl` when available)
   - Query:
     - `rpcUrl`: override the Ethereum RPC URL (optional)
@@ -50,7 +50,7 @@ pnpm dev
 ## Examples (Meebits)
 
 ```bash
-curl 'http://localhost:3000/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076/metadata'
+curl 'http://localhost:3000/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076'
 curl 'http://localhost:3000/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076/image?w=512&h=512&q=70'
 curl -I 'http://localhost:3000/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076/image?w=512&h=512&q=70'
 ```
