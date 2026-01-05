@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Section } from "@/components/Section";
 import { scanNfts, checkNftStatus } from "./actions";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
@@ -16,6 +16,7 @@ type NftItem = {
   error?: string;
   metadataStatus?: "ok" | "error";
   imageStatus?: "ok" | "error";
+  lastScannedAt?: number; // epoch ms (set whenever this NFT is checked)
 };
 
 const shortAddress = (addr: string) => {
@@ -35,16 +36,44 @@ const normalizeImageUrl = (url: string | undefined) => {
 
 const isHexAddress = (s: string) => /^0x[a-fA-F0-9]{40}$/.test(String(s || "").trim());
 
+type ScannerSession = {
+  address: string;
+  savedAt: number;
+  scanStartedAt?: number;
+  scanEndedAt?: number;
+  nfts: NftItem[];
+  wasScanning: boolean;
+};
+
+const sessionKey = (address: string) => `onchainproxy:scanner:${address.toLowerCase()}`;
+const lastAddressKey = "onchainproxy:scanner:last";
+
+const getNftKey = (n: Pick<NftItem, "chain" | "contract" | "tokenId">) =>
+  `${n.chain}:${n.contract.toLowerCase()}:${n.tokenId}`;
+
+const resetNftScan = (n: NftItem): NftItem => ({
+  ...n,
+  status: "pending",
+  error: undefined,
+  metadataStatus: undefined,
+  imageStatus: undefined,
+});
+
 export default function ScannerPage() {
   const [input, setInput] = useState("");
   const [submittedAddress, setSubmittedAddress] = useState<string>("");
   const [nfts, setNfts] = useState<NftItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [scannedCount, setScannedCount] = useState(0);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanStartedAt, setScanStartedAt] = useState<number | null>(null);
+  const [scanEndedAt, setScanEndedAt] = useState<number | null>(null);
+  const cancelRef = useRef(false);
+  const runIdRef = useRef(0);
+  const autoScanTimerRef = useRef<number | null>(null);
 
   const stats = useMemo(() => {
     const total = nfts.length;
-    const scanned = scannedCount;
+    const scanned = nfts.filter((n) => n.status === "ok" || n.status === "error").length;
     const metadataLive = nfts.filter((n) => n.metadataStatus === "ok").length;
     const metadataDown = nfts.filter((n) => n.metadataStatus === "error").length;
     const imageLive = nfts.filter((n) => n.imageStatus === "ok").length;
@@ -76,17 +105,205 @@ export default function ScannerPage() {
       brokenAssets,
       brokenAssetsPct,
     };
-  }, [nfts, scannedCount]);
+  }, [nfts]);
+
+  const hasPending = useMemo(
+    () => nfts.some((n) => n.status === "pending" || n.status === "scanning"),
+    [nfts]
+  );
+
+  // Restore last session on mount (and auto-resume if it was scanning).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const last = window.localStorage.getItem(lastAddressKey);
+      if (!last) return;
+      const raw = window.localStorage.getItem(sessionKey(last));
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as ScannerSession;
+      if (!parsed?.address || !Array.isArray(parsed.nfts)) return;
+
+      // Any "scanning" item becomes "pending" on restore.
+      const restoredNfts = parsed.nfts.map((n) => (n.status === "scanning" ? { ...n, status: "pending" as const } : n));
+
+      setSubmittedAddress(parsed.address);
+      setInput(parsed.address);
+      setNfts(restoredNfts);
+      setScanStartedAt(typeof parsed.scanStartedAt === "number" ? parsed.scanStartedAt : null);
+      setScanEndedAt(typeof parsed.scanEndedAt === "number" ? parsed.scanEndedAt : null);
+
+      if (parsed.wasScanning) {
+        // Resume automatically after refresh.
+        setTimeout(() => {
+          void startScan({ auto: true });
+        }, 0);
+      }
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist session whenever it changes.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!submittedAddress) return;
+    try {
+      const payload: ScannerSession = {
+        address: submittedAddress,
+        savedAt: Date.now(),
+        scanStartedAt: scanStartedAt ?? undefined,
+        scanEndedAt: scanEndedAt ?? undefined,
+        nfts,
+        wasScanning: isScanning,
+      };
+      window.localStorage.setItem(sessionKey(submittedAddress), JSON.stringify(payload));
+      window.localStorage.setItem(lastAddressKey, submittedAddress);
+    } catch {
+      // ignore storage errors
+    }
+  }, [submittedAddress, nfts, isScanning]);
+
+  const scanOne = async (idx: number, opts?: { force?: boolean; runId?: number }) => {
+    const runId = opts?.runId ?? runIdRef.current;
+    const force = Boolean(opts?.force);
+
+    // snapshot current item
+    const current = nfts[idx];
+    if (!current) return;
+    if (!force && (current.status === "ok" || current.status === "error")) return;
+
+    // mark scanning
+    setNfts((prev) => {
+      const next = [...prev];
+      const it = next[idx];
+      if (!it) return prev;
+      next[idx] = { ...it, status: "scanning", error: undefined };
+      return next;
+    });
+
+    try {
+      const status = await checkNftStatus(current.chain, current.contract, current.tokenId);
+      if (runId !== runIdRef.current) return; // stale run
+      if (cancelRef.current) return;
+
+      const ts = Date.now();
+      setNfts((prev) => {
+        const next = [...prev];
+        const it = next[idx];
+        if (!it) return prev;
+        next[idx] = {
+          ...it,
+          status: status.ok ? "ok" : "error",
+          metadataStatus: status.metadataOk ? "ok" : "error",
+          imageStatus: status.imageOk ? "ok" : "error",
+          error: status.ok ? undefined : status.error,
+          lastScannedAt: ts,
+        };
+        return next;
+      });
+    } catch {
+      if (runId !== runIdRef.current) return;
+      if (cancelRef.current) return;
+      const ts = Date.now();
+      setNfts((prev) => {
+        const next = [...prev];
+        const it = next[idx];
+        if (!it) return prev;
+        next[idx] = {
+          ...it,
+          status: "error",
+          error: "Check failed",
+          metadataStatus: "error",
+          imageStatus: "error",
+          lastScannedAt: ts,
+        };
+        return next;
+      });
+    }
+  };
+
+  const startScan = async (opts?: { auto?: boolean }) => {
+    if (!submittedAddress || nfts.length === 0) return;
+    if (isScanning) return;
+
+    cancelRef.current = false;
+    runIdRef.current += 1;
+    const runId = runIdRef.current;
+    setIsScanning(true);
+    if (!scanStartedAt) setScanStartedAt(Date.now());
+    setScanEndedAt(null);
+
+    // Scan in current order, skipping already scanned NFTs.
+    for (let i = 0; i < nfts.length; i++) {
+      if (runId !== runIdRef.current) break;
+      if (cancelRef.current) break;
+
+      const item = nfts[i];
+      if (!item) continue;
+      if (item.status === "ok" || item.status === "error") continue;
+
+      // eslint-disable-next-line no-await-in-loop
+      await scanOne(i, { runId });
+    }
+
+    if (runId === runIdRef.current) {
+      setIsScanning(false);
+      setScanEndedAt(Date.now());
+    }
+  };
+
+  const cancelScan = () => {
+    cancelRef.current = true;
+    runIdRef.current += 1; // invalidate in-flight updates
+    setIsScanning(false);
+  };
+
+  const continueScan = () => void startScan();
+
+  const rescanWallet = () => {
+    if (!submittedAddress || nfts.length === 0) return;
+    cancelScan();
+    setNfts((prev) => prev.map(resetNftScan));
+    setScanStartedAt(Date.now());
+    setScanEndedAt(null);
+    setTimeout(() => void startScan(), 0);
+  };
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isHexAddress(input)) return;
 
     const nextSubmitted = input.trim();
+    // If we already have a cached session for this address, reuse it and continue.
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem(sessionKey(nextSubmitted));
+        if (raw) {
+          const parsed = JSON.parse(raw) as ScannerSession;
+          if (parsed?.address && Array.isArray(parsed.nfts) && parsed.nfts.length > 0) {
+            const restoredNfts = parsed.nfts.map((n) =>
+              n.status === "scanning" ? { ...n, status: "pending" as const } : n
+            );
+            setSubmittedAddress(nextSubmitted);
+            setNfts(restoredNfts);
+            setScanStartedAt(typeof parsed.scanStartedAt === "number" ? parsed.scanStartedAt : Date.now());
+            setScanEndedAt(typeof parsed.scanEndedAt === "number" ? parsed.scanEndedAt : null);
+            setLoading(false);
+            setTimeout(() => void startScan(), 0);
+            return;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     setLoading(true);
     setNfts([]);
-    setScannedCount(0);
     setSubmittedAddress(nextSubmitted);
+    setScanStartedAt(Date.now());
+    setScanEndedAt(null);
 
     try {
       // Step 1: Fetch NFTs from Alchemy
@@ -106,7 +323,7 @@ export default function ScannerPage() {
       setLoading(false);
 
       // Step 2: Scan each NFT one by one
-      processQueue(items);
+      setTimeout(() => void startScan(), 0);
 
     } catch (err: any) {
       alert("Error fetching NFTs: " + err.message);
@@ -117,36 +334,69 @@ export default function ScannerPage() {
   const inputTrimmed = input.trim();
   const canSubmit = isHexAddress(inputTrimmed) && !(loading && nfts.length === 0);
 
-  const processQueue = async (items: NftItem[]) => {
-    // We'll process in small batches or one by one
-    // For "one by one" visual effect, we can do it sequentially
-    
-    const newNfts = [...items];
-    
-    for (let i = 0; i < newNfts.length; i++) {
-      const item = newNfts[i];
-      // Update status to scanning
-      item.status = "scanning";
-      setNfts([...newNfts]);
+  // Auto-start scan when a new valid address is entered (debounced).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (autoScanTimerRef.current) window.clearTimeout(autoScanTimerRef.current);
 
-      try {
-        const status = await checkNftStatus(item.chain, item.contract, item.tokenId);
-        
-        item.status = status.ok ? "ok" : "error";
-        item.metadataStatus = status.metadataOk ? "ok" : "error";
-        item.imageStatus = status.imageOk ? "ok" : "error";
-        if (!status.ok) {
-           item.error = status.error;
+    const next = inputTrimmed;
+    if (!isHexAddress(next)) return;
+    if (next.toLowerCase() === submittedAddress.toLowerCase()) return;
+    if (loading || isScanning) return;
+
+    autoScanTimerRef.current = window.setTimeout(() => {
+      // Trigger the same flow as submit, but without requiring a button click.
+      void (async () => {
+        // If we already have a cached session for this address, reuse it and continue.
+        try {
+          const raw = window.localStorage.getItem(sessionKey(next));
+          if (raw) {
+            const parsed = JSON.parse(raw) as ScannerSession;
+            if (parsed?.address && Array.isArray(parsed.nfts) && parsed.nfts.length > 0) {
+              const restoredNfts = parsed.nfts.map((n) =>
+                n.status === "scanning" ? { ...n, status: "pending" as const } : n
+              );
+              setSubmittedAddress(next);
+              setNfts(restoredNfts);
+              setLoading(false);
+              setTimeout(() => void startScan(), 0);
+              return;
+            }
+          }
+        } catch {
+          // ignore
         }
-      } catch (err) {
-        item.status = "error";
-        item.error = "Check failed";
-      }
 
-      setScannedCount(prev => prev + 1);
-      setNfts([...newNfts]);
-    }
-  };
+        setLoading(true);
+        setNfts([]);
+        setSubmittedAddress(next);
+
+        try {
+          const result = await scanNfts(next);
+          const items: NftItem[] = result.nfts.map((n: any) => ({
+            contract: n.contract?.address,
+            tokenId: n.tokenId,
+            chain: "eth",
+            title: n.title || `#${n.tokenId}`,
+            collection: n.collection,
+            thumbnailUrl: n.thumbnailUrl,
+            status: "pending",
+            lastScannedAt: undefined,
+          }));
+          setNfts(items);
+          setLoading(false);
+          setTimeout(() => void startScan(), 0);
+        } catch (err: any) {
+          alert("Error fetching NFTs: " + err.message);
+          setLoading(false);
+        }
+      })();
+    }, 400);
+
+    return () => {
+      if (autoScanTimerRef.current) window.clearTimeout(autoScanTimerRef.current);
+    };
+  }, [inputTrimmed, submittedAddress, loading, isScanning, scanStartedAt]);
 
   return (
     <main className="min-h-screen max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 font-mono text-sm">
@@ -187,6 +437,42 @@ export default function ScannerPage() {
               Please enter a valid Ethereum address (0x + 40 hex chars).
             </div>
           ) : null}
+          {submittedAddress && nfts.length > 0 ? (
+            <div className="mt-7 space-y-3">
+              <div className="h-1 w-full bg-foreground-faint/20">
+                <div
+                  className="h-full bg-foreground"
+                  style={{ width: `${Math.min(100, Math.max(0, stats.progressPct))}%` }}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-foreground-muted">
+                <div className="flex flex-wrap gap-x-6 gap-y-3">
+                  <button
+                    type="button"
+                    onClick={rescanWallet}
+                    className="text-link hover:underline font-bold disabled:opacity-50"
+                    disabled={isScanning || nfts.length === 0}
+                  >
+                    Rescan wallet
+                  </button>
+                  {isScanning ? (
+                    <button type="button" onClick={cancelScan} className="text-link hover:underline font-bold">
+                      Cancel scan
+                    </button>
+                  ) : hasPending ? (
+                    <button type="button" onClick={continueScan} className="text-link hover:underline font-bold">
+                      Continue scan
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="text-foreground font-bold">
+                  {stats.progressPct}%
+                </div>
+              </div>
+            </div>
+          ) : null}
         </Section>
 
         {nfts.length > 0 && (
@@ -202,7 +488,7 @@ export default function ScannerPage() {
                 <div className="space-y-1">
                    <div className="text-foreground-faint">Progress</div>
                    <div className="text-foreground font-bold">
-                    {stats.scanned}/{stats.total} ({stats.progressPct}%)
+                    {stats.scanned}/{stats.total}
                    </div>
                 </div>
                 {stats.errors > 0 && (
@@ -239,7 +525,7 @@ export default function ScannerPage() {
               </div>
             </Section>
 
-            <Section title={`Results (${scannedCount}/${nfts.length})`}>
+            <Section title={`Results (${stats.scanned}/${nfts.length})`}>
               <div className="border-t border-foreground-faint/20">
                 {nfts.map((nft, idx) => {
                   const thumb = normalizeImageUrl(nft.thumbnailUrl);
@@ -311,6 +597,24 @@ export default function ScannerPage() {
                             <div className={nft.imageStatus === "ok" ? "text-green-600" : "text-red-500 font-bold"}>
                               IMG: {nft.imageStatus === "ok" ? "OK" : "ERR"}
                             </div>
+                            <button
+                              type="button"
+                              className="text-link hover:underline font-bold"
+                              onClick={() => {
+                                // Cancel any ongoing run and rescan this NFT only
+                                cancelScan();
+                                setNfts((prev) => {
+                                  const next = [...prev];
+                                  const it = next[idx];
+                                  if (!it) return prev;
+                                  next[idx] = resetNftScan(it);
+                                  return next;
+                                });
+                                setTimeout(() => void scanOne(idx, { force: true }), 0);
+                              }}
+                            >
+                              Rescan
+                            </button>
                           </div>
                         )}
                       </div>
