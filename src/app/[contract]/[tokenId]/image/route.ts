@@ -3,7 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { computeWeakEtag, maybeNotModified } from "@/lib/nft/etag";
 import { clampInt, jsonError, sendSvgFallback, setCacheControl } from "@/lib/nft/http";
-import { decodeDataUrlToBuffer, fetchImageBuffer, maybeResizeToWebp } from "@/lib/nft/image";
+import { fetchImageBuffer, maybeResizeToWebp } from "@/lib/nft/image";
+import { decodeDataUrlToBuffer } from "@/lib/nft/dataUrl";
 import { resolveNftMetadata } from "@/lib/nft/metadata";
 
 export const runtime = "nodejs";

@@ -1,7 +1,6 @@
 import { LruTtlCache } from "@/lib/cache/lru";
 import { getSharp } from "@/lib/image/sharp";
 import { computeWeakEtag } from "@/lib/nft/etag";
-export { decodeDataUrlToBuffer } from "@/lib/nft/dataUrl";
 
 type FetchImageResult = {
   contentType: string;
