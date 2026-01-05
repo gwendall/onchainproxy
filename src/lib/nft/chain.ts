@@ -7,7 +7,7 @@ export type SupportedChain =
   | "zksync"
   | "linea"
   | "scroll"
-  | "zkevm";
+  | "polygon-zkevm";
 
 export const SUPPORTED_CHAINS: SupportedChain[] = [
   "eth",
@@ -18,7 +18,7 @@ export const SUPPORTED_CHAINS: SupportedChain[] = [
   "zksync",
   "linea",
   "scroll",
-  "zkevm",
+  "polygon-zkevm",
 ];
 
 export const supportedChainsHint = () => SUPPORTED_CHAINS.map((c) => `/${c}/...`).join(", ");
@@ -33,7 +33,7 @@ export const normalizeChain = (raw: string): SupportedChain | null => {
   if (c === "zksync" || c === "zksync-era" || c === "era") return "zksync";
   if (c === "linea") return "linea";
   if (c === "scroll") return "scroll";
-  if (c === "zkevm" || c === "polygon-zkevm" || c === "polygonzkevm") return "zkevm";
+  if (c === "polygon-zkevm" || c === "polygonzkevm" || c === "zkevm") return "polygon-zkevm";
   return null;
 };
 

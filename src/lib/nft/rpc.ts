@@ -52,13 +52,17 @@ const defaultRpcUrlsByChain: Record<SupportedChain, string[]> = {
     "https://rpc.scroll.io",
     "https://scroll.publicnode.com",
   ],
-  zkevm: [
+  "polygon-zkevm": [
     "https://zkevm-rpc.com",
     "https://polygon-zkevm.publicnode.com",
   ],
 };
 
-const envKeyForChain = (chain: SupportedChain) => chain.toUpperCase();
+const envKeyForChain = (chain: SupportedChain) =>
+  chain
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 
 const getRpcUrls = (rpcUrlQuery: string | null, chain: SupportedChain) => {
   const unique: string[] = [];

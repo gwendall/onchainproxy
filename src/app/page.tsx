@@ -17,7 +17,7 @@ export default function Home() {
           <p className="text-foreground-muted">
             Stable, cache-friendly URLs for NFT images and metadata. Designed for thumbnails, wallets, and UI.
           </p>
-          <p className="text-foreground-muted">Built for the EVM. Supports Ethereum + major L2s.</p>
+          <p className="text-foreground-muted">Built for the EVM. Supports Ethereum and major EVM L2s.</p>
         </header>
 
         <Section title="Supported chains">
@@ -34,6 +34,9 @@ export default function Home() {
               </span>
             ))}
           </div>
+          <p className="text-foreground-faint">
+            All chains are treated identically: read-only RPC, on-chain metadata resolution, and cacheable HTTP responses.
+          </p>
           <p className="text-foreground-faint">
             Tip: you can still override RPC per-request with <span className="text-foreground">?rpcUrl=...</span>.
           </p>
