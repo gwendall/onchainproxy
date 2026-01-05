@@ -1,6 +1,6 @@
-# NFTProxy
+# OnChainProxy
 
-Developer-friendly endpoints to fetch **EVM NFT metadata** and **images** without worrying about IPFS, CORS, remote domains, or flaky RPCs.
+Developer-friendly endpoints to fetch **on-chain asset metadata** and **images** without worrying about IPFS, CORS, remote domains, or flaky RPCs.
 
 Currently: **Ethereum + major L2s**.
 
@@ -60,18 +60,18 @@ pnpm dev
   - You can use either contract address in the URL:
     - **CryptoPunks (original)**: `0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb`
     - **CryptoPunksData (helper)**: `0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2`
-  - Under the hood, NFTProxy always reads the SVG + attributes from **CryptoPunksData**.
+  - Under the hood, OnChainProxy always reads the SVG + attributes from **CryptoPunksData**.
   - Example:
     - `GET /eth/0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb/0`
     - `GET /eth/0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb/0/image?w=512`
     - `GET /eth/0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2/0`
 
-## Examples (Meebits)
+## Examples (CryptoPunks)
 
 ```bash
-curl 'http://localhost:3000/eth/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076'
-curl 'http://localhost:3000/eth/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076/image?w=512&h=512&q=70'
-curl -I 'http://localhost:3000/eth/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076/image?w=512&h=512&q=70'
+curl 'http://localhost:3000/eth/0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb/2113'
+curl 'http://localhost:3000/eth/0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb/2113/image?w=512&h=512&q=70'
+curl -I 'http://localhost:3000/eth/0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb/2113/image?w=512&h=512&q=70'
 ```
 
 ## Caching (what to expect)
@@ -83,17 +83,17 @@ Responses are cache-friendly:
 ## Config (env)
 
 - **Per-chain (preferred)**:
-  - **`NFT_RPC_URLS_ETH`**, **`NFT_RPC_URL_ETH`**
-  - **`NFT_RPC_URLS_ARB`**, **`NFT_RPC_URL_ARB`**
-  - **`NFT_RPC_URLS_OP`**, **`NFT_RPC_URL_OP`**
-  - **`NFT_RPC_URLS_BASE`**, **`NFT_RPC_URL_BASE`**
-  - **`NFT_RPC_URLS_POLYGON`**, **`NFT_RPC_URL_POLYGON`**
-  - **`NFT_RPC_URLS_ZKSYNC`**, **`NFT_RPC_URL_ZKSYNC`**
-  - **`NFT_RPC_URLS_LINEA`**, **`NFT_RPC_URL_LINEA`**
-  - **`NFT_RPC_URLS_SCROLL`**, **`NFT_RPC_URL_SCROLL`**
-  - **`NFT_RPC_URLS_POLYGON_ZKEVM`**, **`NFT_RPC_URL_POLYGON_ZKEVM`**
+  - **`ONCHAIN_RPC_URLS_ETH`**, **`ONCHAIN_RPC_URL_ETH`**
+  - **`ONCHAIN_RPC_URLS_ARB`**, **`ONCHAIN_RPC_URL_ARB`**
+  - **`ONCHAIN_RPC_URLS_OP`**, **`ONCHAIN_RPC_URL_OP`**
+  - **`ONCHAIN_RPC_URLS_BASE`**, **`ONCHAIN_RPC_URL_BASE`**
+  - **`ONCHAIN_RPC_URLS_POLYGON`**, **`ONCHAIN_RPC_URL_POLYGON`**
+  - **`ONCHAIN_RPC_URLS_ZKSYNC`**, **`ONCHAIN_RPC_URL_ZKSYNC`**
+  - **`ONCHAIN_RPC_URLS_LINEA`**, **`ONCHAIN_RPC_URL_LINEA`**
+  - **`ONCHAIN_RPC_URLS_SCROLL`**, **`ONCHAIN_RPC_URL_SCROLL`**
+  - **`ONCHAIN_RPC_URLS_POLYGON_ZKEVM`**, **`ONCHAIN_RPC_URL_POLYGON_ZKEVM`**
 - **Global (backwards-compatible fallback)**:
-  - **`NFT_RPC_URLS`**: comma-separated RPC URLs (applies to all chains)
-  - **`NFT_RPC_URL`**: single RPC URL (applies to all chains)
+  - **`ONCHAIN_RPC_URLS`**: comma-separated RPC URLs (applies to all chains)
+  - **`ONCHAIN_RPC_URL`**: single RPC URL (applies to all chains)
 - **`IPFS_GATEWAY`**: IPFS gateway base (default `https://ipfs.io/ipfs`)
 - **`NEXT_PUBLIC_SITE_URL`** or **`SITE_URL`**: base URL used for metadata (default `http://localhost:3000`)

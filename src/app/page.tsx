@@ -13,9 +13,9 @@ export default function Home() {
     <main className="min-h-screen max-w-2xl mx-auto px-6 py-8 font-mono">
       <div className="space-y-10">
         <header className="space-y-3">
-          <h1 className="font-bold">NFTProxy</h1>
+          <h1 className="font-bold">OnChainProxy</h1>
           <p className="text-foreground-muted">
-            Stable, cache-friendly URLs for NFT images and metadata. Designed for thumbnails, wallets, and UI.
+            Stable, cache-friendly URLs for on-chain asset metadata and images. Designed for thumbnails, wallets, and UI.
           </p>
           <p className="text-foreground-muted">Built for the EVM. Supports Ethereum and major EVM L2s.</p>
         </header>
@@ -42,9 +42,9 @@ export default function Home() {
           </p>
         </Section>
 
-        <Section title="Why NFTProxy exists">
+        <Section title="Why OnChainProxy exists">
           <p className="text-foreground-muted">
-            Fetching NFT images is slow, flaky, and inconsistent (IPFS gateways, huge images, random hosts, on-chain data
+            Fetching on-chain images is slow, flaky, and inconsistent (IPFS gateways, huge images, random hosts, on-chain data
             URLs). The naive solution is an indexer + a database. This is the opposite: a tiny origin that resolves the
             freshest tokenURI/uri from chain RPC at request time, then lets caching
             do the heavy lifting.
@@ -54,8 +54,8 @@ export default function Home() {
         <Section title="At a broader level">
           <p className="text-foreground-muted">
             If digital art and on-chain assets are meant to last, their interfaces need to be more resilient
-            than the platforms that serve them. Today, much of NFT UX still depends on centralized services sitting
-            between users and the chain. NFTProxy is a small step toward reducing that dependency - by making on-chain
+            than the platforms that serve them. Today, much of this UX still depends on centralized services sitting
+            between users and the chain. OnChainProxy is a small step toward reducing that dependency - by making on-chain
             data directly consumable over cacheable HTTP, without introducing new state or infrastructure.
           </p>
           <p className="text-foreground-muted">
@@ -81,7 +81,7 @@ export default function Home() {
 
         <Section title="Endpoints">
           <p className="text-foreground-muted">
-            Use NFT Proxy as the src for images or as a metadata fetcher - it resolves on-chain tokenURI at request time and
+            Use OnChainProxy as the src for images or as a metadata fetcher - it resolves on-chain tokenURI at request time and
             returns a cacheable HTTP response.
           </p>
           <p className="text-foreground-muted">
@@ -123,6 +123,13 @@ export default function Home() {
             Cache-friendly responses: <span className="text-foreground">ETag</span> +{" "}
             <span className="text-foreground">Cache-Control</span>.
           </p>
+        </Section>
+
+        <Section title="Notes (formats)">
+          <ul className="list-disc pl-5 space-y-1 text-foreground-muted">
+            <li>Standards: ERC-721 and ERC-1155 (via tokenURI/uri).</li>
+            <li>Special cases: legacy contracts like CryptoPunks are supported too.</li>
+          </ul>
         </Section>
 
         <Section title="Example (CryptoPunks)">

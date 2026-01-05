@@ -80,11 +80,14 @@ const getRpcUrls = (rpcUrlQuery: string | null, chain: SupportedChain) => {
 
   if (typeof rpcUrlQuery === "string" && rpcUrlQuery.length > 0) add(rpcUrlQuery);
 
-  // Chain-specific env (preferred): NFT_RPC_URLS_ARB / NFT_RPC_URL_ARB, etc.
+  // Chain-specific env (preferred): ONCHAIN_RPC_URLS_ARB / ONCHAIN_RPC_URL_ARB, etc.
   {
     const suffix = envKeyForChain(chain);
     const env =
-      process.env[`NFT_RPC_URLS_${suffix}`]
+      process.env[`ONCHAIN_RPC_URLS_${suffix}`]
+      || process.env[`ONCHAIN_RPC_URL_${suffix}`]
+      // Backwards-compatible legacy envs (not documented).
+      || process.env[`NFT_RPC_URLS_${suffix}`]
       || process.env[`NFT_RPC_URL_${suffix}`]
       || "";
     if (typeof env === "string" && env.length > 0) {
@@ -94,7 +97,12 @@ const getRpcUrls = (rpcUrlQuery: string | null, chain: SupportedChain) => {
 
   // Backwards-compatible/global env (applies to all chains when set).
   {
-    const env = process.env.NFT_RPC_URLS || process.env.NFT_RPC_URL || "";
+    const env = process.env.ONCHAIN_RPC_URLS
+      || process.env.ONCHAIN_RPC_URL
+      // Backwards-compatible legacy envs (not documented).
+      || process.env.NFT_RPC_URLS
+      || process.env.NFT_RPC_URL
+      || "";
     if (typeof env === "string" && env.length > 0) {
       for (const u of env.split(",").map((s) => s.trim()).filter((s) => s.length > 0)) add(u);
     }
