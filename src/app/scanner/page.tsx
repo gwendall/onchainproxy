@@ -577,6 +577,22 @@ export default function ScannerPage() {
                             <span>OpenSea</span>
                             <ArrowUpRight className="w-4 h-4" />
                           </a>
+                          <a
+                            href={`/${nft.chain}/${nft.contract}/${nft.tokenId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 text-foreground-faint/70 hover:text-foreground hover:underline transition-colors"
+                          >
+                            Metadata
+                          </a>
+                          <a
+                            href={`/${nft.chain}/${nft.contract}/${nft.tokenId}/image?raw=1`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 text-foreground-faint/70 hover:text-foreground hover:underline transition-colors"
+                          >
+                            Raw image
+                          </a>
                         </div>
                         
                         {nft.error ? (
