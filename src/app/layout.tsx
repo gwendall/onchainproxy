@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -51,75 +52,94 @@ export const viewport: Viewport = {
   themeColor: "#000000",
 };
 
-export const metadata: Metadata = {
-  metadataBase: siteUrl,
-  title: {
-    default: "OnChainProxy",
-    template: "%s | OnChainProxy",
-  },
-  description: "Stable, cache-friendly URLs for on-chain asset metadata and images.",
-  applicationName: "OnChainProxy",
-  keywords: [
-    "Ethereum",
-    "on-chain",
-    "collectibles",
-    "ERC721",
-    "ERC1155",
-    "metadata",
-    "image",
-    "proxy",
-    "cache",
-    "IPFS",
-    "API",
-  ],
-  authors: [{ name: "Gwendall" }],
-  creator: "Gwendall",
-  openGraph: {
-    title: "OnChainProxy",
+const getRequestBaseUrl = async () => {
+  // Prefer runtime request headers to avoid accidentally emitting private Vercel preview URLs
+  // (which can be behind SSO and break social cards).
+  const h = await headers();
+  const host = h.get("x-forwarded-host") || h.get("host");
+  const proto = h.get("x-forwarded-proto") || "https";
+  if (host && host.length > 0) {
+    try {
+      return new URL(`${proto}://${host}`);
+    } catch {
+      // fall through
+    }
+  }
+  return siteUrl;
+};
+
+export const generateMetadata = async (): Promise<Metadata> => {
+  const base = await getRequestBaseUrl();
+  return {
+    metadataBase: base,
+    title: {
+      default: "OnChainProxy",
+      template: "%s | OnChainProxy",
+    },
     description: "Stable, cache-friendly URLs for on-chain asset metadata and images.",
-    url: "/",
-    siteName: "OnChainProxy",
-    locale: "en_US",
-    type: "website",
-    images: [
-      {
-        url: "/opengraph-image",
-        width: 1200,
-        height: 630,
-        alt: "OnChainProxy",
-      },
+    applicationName: "OnChainProxy",
+    keywords: [
+      "Ethereum",
+      "on-chain",
+      "collectibles",
+      "ERC721",
+      "ERC1155",
+      "metadata",
+      "image",
+      "proxy",
+      "cache",
+      "IPFS",
+      "API",
     ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "OnChainProxy",
-    description: "Stable, cache-friendly URLs for on-chain asset metadata and images.",
-    creator: "@gwendall",
-    images: [
-      {
-        url: "/twitter-image",
-        width: 1200,
-        height: 630,
-        alt: "OnChainProxy",
-      },
-    ],
-  },
-  icons: {
-    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
-    shortcut: ["/favicon.svg"],
-    apple: [{ url: "/apple-icon", type: "image/png" }],
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
+    authors: [{ name: "Gwendall" }],
+    creator: "Gwendall",
+    openGraph: {
+      title: "OnChainProxy",
+      description: "Stable, cache-friendly URLs for on-chain asset metadata and images.",
+      url: "/",
+      siteName: "OnChainProxy",
+      locale: "en_US",
+      type: "website",
+      images: [
+        {
+          url: "/opengraph-image",
+          width: 1200,
+          height: 630,
+          alt: "OnChainProxy",
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: "OnChainProxy",
+      description: "Stable, cache-friendly URLs for on-chain asset metadata and images.",
+      creator: "@gwendall",
+      images: [
+        {
+          url: "/twitter-image",
+          width: 1200,
+          height: 630,
+          alt: "OnChainProxy",
+        },
+      ],
+    },
+    icons: {
+      icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+      shortcut: ["/favicon.svg"],
+      apple: [{ url: "/apple-icon", type: "image/png" }],
+    },
+    robots: {
       index: true,
       follow: true,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-video-preview": -1,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+      },
     },
-  },
+  };
 };
 
 export default function RootLayout({
