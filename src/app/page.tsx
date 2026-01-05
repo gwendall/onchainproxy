@@ -24,7 +24,7 @@ export default function Home() {
             RPC calls.
           </li>
           <li>
-            Extremely lightweight: no indexer, no database — fetch, normalize, return a stable URL per token.
+            Stateless and lightweight: no indexer, no database — fetch, normalize, and return a stable URL per token.
           </li>
           <li>Acts like a “hidden CDN”: ETag + Cache-Control enable fast edge/browser caching.</li>
         </ul>
