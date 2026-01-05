@@ -3,7 +3,7 @@ export default function Home() {
   const meebitsTokenId = "14076";
 
   const metadataParams = ["rpcUrl", "debug=1"] as const;
-  const imageParams = ["raw=1", "w", "h", "q", "rpcUrl", "debug=1", "json=1"] as const;
+  const imageParams = ["raw=1", "svg=1", "w", "h", "q", "rpcUrl", "debug=1", "json=1"] as const;
 
   return (
     <main className="min-h-screen max-w-2xl mx-auto px-6 py-8 font-mono">
@@ -52,7 +52,7 @@ export default function Home() {
               <span className="text-foreground">GET</span>{" "}
               <span className="text-foreground">/:contract/:tokenId/image</span>
             </div>
-            <div className="text-foreground-faint">Returns the image (or WebP when resized).</div>
+            <div className="text-foreground-faint">Returns WebP when possible (thumbnail-optimized).</div>
             <div className="mt-1 text-foreground-faint">
               Query params:{" "}
               <span className="text-foreground">
@@ -89,6 +89,11 @@ export default function Home() {
             <ul className="mt-1 list-disc pl-5 space-y-1">
               <li>
                 <span className="text-foreground">raw=1</span>: return the original image (no resize / no WebP)
+              </li>
+              <li>
+                By default, SVGs are rasterized to WebP (so <span className="text-foreground">w/h/q</span> applies).{" "}
+                <span className="text-foreground">svg=1</span> is an escape hatch to keep SVG as SVG (vector) while still
+                proxying from this origin (no redirect).
               </li>
               <li>
                 <span className="text-foreground">w</span>, <span className="text-foreground">h</span>: max resize

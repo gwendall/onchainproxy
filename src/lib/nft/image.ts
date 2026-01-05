@@ -55,16 +55,17 @@ export const maybeResizeToWebp = async (params: {
   height: number;
   quality: number;
   cacheTtlMs: number;
+  allowSvgRasterize?: boolean;
 }) => {
   const safeContentType = typeof params.inputContentType === "string" ? params.inputContentType : "";
   const isSvg = safeContentType.includes("image/svg");
   const isGif = safeContentType.includes("image/gif");
   const isImage = safeContentType.startsWith("image/");
 
-  if (isSvg || isGif || !isImage) return null;
+  if ((isSvg && !params.allowSvgRasterize) || isGif || !isImage) return null;
 
   const inputId = computeWeakEtag(params.input);
-  const key = `${params.width}x${params.height}:q${params.quality}:${safeContentType}:${inputId}`;
+  const key = `${params.width}x${params.height}:q${params.quality}:svg${params.allowSvgRasterize ? 1 : 0}:${safeContentType}:${inputId}`;
   const nowMs = Date.now();
   const cached = imageTransformCache.get(key, nowMs);
   if (cached) return cached;

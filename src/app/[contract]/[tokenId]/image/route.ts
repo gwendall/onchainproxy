@@ -46,7 +46,12 @@ export const GET = async (
     const search = request.nextUrl.searchParams;
     const rpcUrl = search.get("rpcUrl");
     const raw = search.get("raw"); // "1" / "true" to return the original bytes (no transform)
-    const wantOriginal = raw === "1" || raw === "true" || raw === "yes";
+    const wantOriginal = raw === "1";
+    // By default we rasterize SVGs to WebP for thumbnail friendliness.
+    // Use raw=1 to get the original SVG, or svg=1 to force passthrough SVG without redirect.
+    const svg = search.get("svg");
+    const forceSvg = svg === "1";
+    const allowSvgRasterize = !wantOriginal && !forceSvg;
 
     const cacheSeconds = 60 * 60 * 24; // 1 day
     const lruTtlMs = 5 * 60 * 1000; // 5 min per instance
@@ -85,6 +90,7 @@ export const GET = async (
         height,
         quality,
         cacheTtlMs: lruTtlMs,
+        allowSvgRasterize,
       });
 
       // If sharp isn't available or content-type is excluded (svg/gif/etc), just passthrough.
@@ -129,6 +135,7 @@ export const GET = async (
       height,
       quality,
       cacheTtlMs: lruTtlMs,
+      allowSvgRasterize,
     });
 
     if (!transformed) {

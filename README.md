@@ -39,9 +39,10 @@ pnpm dev
 
 - **Image**
   - `GET /:contract/:tokenId/image`
-  - Returns: `image/*` (or WebP when resized)
+  - Returns: `image/webp` **when possible** (thumbnail-optimized). Falls back to the original format when WebP transform is not available.
   - Query:
     - `raw=1`: return the original image (no resize / no WebP). For remote URLs this is a 302 redirect; for `data:` URLs this returns the raw bytes.
+    - `svg=1`: **SVG escape hatch**. Keep SVG as SVG (vector) while still proxying it from this origin (no WebP rasterization). This exists for the niche case where you want same-origin SVG bytes without a redirect. (If you don’t care, ignore it.)
     - `w`, `h`: max resize bounds (default 512, min 16, max 2048)
     - `q`: WebP quality (default 70, min 30, max 90)
     - `rpcUrl`: override the Ethereum RPC URL (optional)
