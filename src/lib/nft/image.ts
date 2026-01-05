@@ -69,6 +69,7 @@ export const maybeResizeToWebp = async (params: {
   quality: number;
   cacheTtlMs: number;
   allowSvgRasterize?: boolean;
+  backgroundColor?: string;
 }) => {
   const safeContentType = typeof params.inputContentType === "string" ? params.inputContentType : "";
   const ct = safeContentType.toLowerCase();
@@ -91,8 +92,8 @@ export const maybeResizeToWebp = async (params: {
   const sharp = await getSharp();
   if (!sharp) return null;
 
-  const resizeToWebp = (input: Buffer) =>
-    sharp(input)
+  const resizeToWebp = (input: Buffer) => {
+    let pipe = sharp(input)
       .resize({
         width: params.width,
         height: params.height,
@@ -100,7 +101,14 @@ export const maybeResizeToWebp = async (params: {
         // For raster inputs, avoid upscaling.
         // For SVGs, upscaling is expected (vector), otherwise thumbnails can end up tiny.
         withoutEnlargement: !isSvg,
-      })
+      });
+
+    // If requested (e.g. CryptoPunks), fill transparent pixels with a known background color.
+    if (params.backgroundColor && params.backgroundColor.trim().length > 0) {
+      pipe = pipe.flatten({ background: params.backgroundColor.trim() });
+    }
+
+    return pipe
       .webp(
         isSvg
           // SVG -> lossless WebP to avoid compression artifacts (sharp edges, flat colors).
@@ -108,6 +116,7 @@ export const maybeResizeToWebp = async (params: {
           : { quality: params.quality },
       )
       .toBuffer();
+  };
 
   let output: Buffer | null = null;
   try {

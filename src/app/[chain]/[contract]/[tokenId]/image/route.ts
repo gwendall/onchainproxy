@@ -7,6 +7,7 @@ import { computeWeakEtag, maybeNotModified } from "@/lib/nft/etag";
 import { clampInt, jsonError, sendSvgFallback, setCacheControl } from "@/lib/nft/http";
 import { fetchImageBuffer, maybeResizeToWebp } from "@/lib/nft/image";
 import { resolveNftMetadata } from "@/lib/nft/metadata";
+import { isCryptoPunksContract } from "@/lib/nft/punks";
 
 export const runtime = "nodejs";
 
@@ -104,6 +105,7 @@ export const GET = async (
     const svg = search.get("svg");
     const forceSvg = svg === "1";
     const allowSvgRasterize = !wantOriginal && !forceSvg;
+    const punksBg = (chain === "eth" && isCryptoPunksContract(contract) && allowSvgRasterize) ? "#638696" : undefined;
 
     const cacheSeconds = 60 * 60 * 24; // 1 day
     const lruTtlMs = 5 * 60 * 1000; // 5 min per instance
@@ -147,6 +149,7 @@ export const GET = async (
         quality,
         cacheTtlMs: lruTtlMs,
         allowSvgRasterize,
+        backgroundColor: punksBg,
       });
 
       // If sharp isn't available or content-type is excluded (svg/gif/etc), just passthrough.
@@ -194,6 +197,7 @@ export const GET = async (
       quality,
       cacheTtlMs: lruTtlMs,
       allowSvgRasterize,
+      backgroundColor: punksBg,
     });
 
     if (!transformed) {

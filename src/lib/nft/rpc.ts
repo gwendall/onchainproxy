@@ -2,17 +2,13 @@ import { BigNumber, ethers } from "ethers";
 
 import { LruTtlCache } from "@/lib/cache/lru";
 import { resolveErc1155TemplateUri } from "@/lib/nft/erc1155";
+import { CRYPTOPUNKS_DATA_CONTRACT, isCryptoPunksContract } from "@/lib/nft/punks";
 import type { SupportedChain } from "@/lib/nft/chain";
 
 const ERC721_ABI = ["function tokenURI(uint256 tokenId) view returns (string)"];
 const ERC1155_ABI = ["function uri(uint256 id) view returns (string)"];
 
-// CryptoPunks are pre-ERC721.
-// Users may reference either:
-// - the original CryptoPunks contract (legacy, no tokenURI)
-// - the CryptoPunksData contract (helper that exposes on-chain SVG + attributes)
-const CRYPTOPUNKS_ORIGINAL_CONTRACT = "0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb";
-const CRYPTOPUNKS_DATA_CONTRACT = "0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2";
+// CryptoPunks are pre-ERC721. We read SVG + attributes from CryptoPunksData.
 const PUNKS_DATA_ABI = [
   "function punkImageSvg(uint16 index) view returns (string)",
   "function punkAttributes(uint16 index) view returns (string)",
@@ -175,11 +171,6 @@ const jsonRpcCall = async (params: {
   return json.result;
 };
 
-const isCryptoPunksSupportedContract = (contract: string) => {
-  const c = contract.trim().toLowerCase();
-  return c === CRYPTOPUNKS_ORIGINAL_CONTRACT || c === CRYPTOPUNKS_DATA_CONTRACT;
-};
-
 const toSvgDataUrl = (svgOrDataUrl: string) => {
   const s = String(svgOrDataUrl ?? "").trim();
   // Some implementations return a full data: URL already. If so, keep it as-is.
@@ -253,7 +244,7 @@ export const resolveTokenMetadataUri = async (params: {
   if (cached) return { metadataUri: cached, rpcUrl: "cache" };
 
   // CryptoPunks special-case (pre-ERC721).
-  if (params.chain === "eth" && isCryptoPunksSupportedContract(params.contract)) {
+  if (params.chain === "eth" && isCryptoPunksContract(params.contract)) {
     const id = (() => {
       try {
         // CryptoPunks are 0..9999, fits in uint16.
