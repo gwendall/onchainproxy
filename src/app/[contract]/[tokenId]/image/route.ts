@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 import { computeWeakEtag, maybeNotModified } from "@/lib/nft/etag";
 import { clampInt, jsonError, sendSvgFallback, setCacheControl } from "@/lib/nft/http";
@@ -44,7 +44,8 @@ export const GET = async (
 
     const search = request.nextUrl.searchParams;
     const rpcUrl = search.get("rpcUrl");
-    const mode = search.get("mode"); // "original" to redirect
+    const raw = search.get("raw"); // "1" / "true" to return the original bytes (no transform)
+    const wantOriginal = raw === "1" || raw === "true" || raw === "yes";
 
     const cacheSeconds = 60 * 60 * 24; // 1 day
     const lruTtlMs = 5 * 60 * 1000; // 5 min per instance
@@ -63,16 +64,45 @@ export const GET = async (
     const imageUrl = meta.imageUrl;
     if (!imageUrl) return sendSvgFallback(404, "No image");
 
-    if (mode === "original") {
-      const resp = Response.redirect(imageUrl, 302);
-      setCacheControl(resp.headers, cacheSeconds);
-      return resp;
+    if (wantOriginal) {
+      // Redirect when possible, but for data: URLs return the bytes directly.
+      if (!imageUrl.startsWith("data:")) {
+        const resp = NextResponse.redirect(imageUrl, 302);
+        setCacheControl(resp.headers, cacheSeconds);
+        return resp;
+      }
     }
 
     if (imageUrl.startsWith("data:")) {
       const decoded = decodeDataUrlToBuffer(imageUrl);
       if (!decoded) return sendSvgFallback(400, "Bad data URL");
-      const etag = computeWeakEtag(decoded.body);
+
+      const transformed = await maybeResizeToWebp({
+        input: decoded.body,
+        inputContentType: decoded.mime,
+        width,
+        height,
+        quality,
+        cacheTtlMs: lruTtlMs,
+      });
+
+      // If sharp isn't available or content-type is excluded (svg/gif/etc), just passthrough.
+      if (!transformed || wantOriginal) {
+        const etag = computeWeakEtag(decoded.body);
+        if (maybeNotModified(request, etag)) {
+          const headers = new Headers();
+          headers.set("ETag", etag);
+          setCacheControl(headers, cacheSeconds);
+          return new Response(null, { status: 304, headers });
+        }
+        const headers = new Headers();
+        headers.set("Content-Type", decoded.mime);
+        headers.set("ETag", etag);
+        setCacheControl(headers, cacheSeconds);
+        return new Response(new Uint8Array(decoded.body), { status: 200, headers });
+      }
+
+      const etag = computeWeakEtag(transformed);
       if (maybeNotModified(request, etag)) {
         const headers = new Headers();
         headers.set("ETag", etag);
@@ -80,10 +110,10 @@ export const GET = async (
         return new Response(null, { status: 304, headers });
       }
       const headers = new Headers();
-      headers.set("Content-Type", decoded.mime);
+      headers.set("Content-Type", "image/webp");
       headers.set("ETag", etag);
       setCacheControl(headers, cacheSeconds);
-      return new Response(new Uint8Array(decoded.body), { status: 200, headers });
+      return new Response(new Uint8Array(transformed), { status: 200, headers });
     }
 
     const fetched = await fetchImageBuffer({

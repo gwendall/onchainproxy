@@ -3,7 +3,7 @@ export default function Home() {
   const meebitsTokenId = "14076";
 
   const metadataParams = ["rpcUrl", "debug=1"] as const;
-  const imageParams = ["mode=original", "w", "h", "q", "rpcUrl", "debug=1", "json=1"] as const;
+  const imageParams = ["raw=1", "w", "h", "q", "rpcUrl", "debug=1", "json=1"] as const;
 
   return (
     <main className="min-h-screen max-w-2xl mx-auto px-6 py-8 font-mono">
@@ -88,7 +88,7 @@ export default function Home() {
             <div className="text-foreground">GET /:contract/:tokenId/image</div>
             <ul className="mt-1 list-disc pl-5 space-y-1">
               <li>
-                <span className="text-foreground">mode=original</span>: 302 redirect to the source image URL
+                <span className="text-foreground">raw=1</span>: return the original image (no resize / no WebP)
               </li>
               <li>
                 <span className="text-foreground">w</span>, <span className="text-foreground">h</span>: max resize

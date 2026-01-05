@@ -18,7 +18,7 @@ It:
 - Resolves `tokenURI()` (ERC-721) or `uri()` (ERC-1155) on **Ethereum** via JSON-RPC `eth_call` (tries multiple RPCs).
 - Fetches and parses the token metadata JSON (supports `data:` and IPFS).
 - Extracts the best `image*` field, resolves IPFS, then either:
-  - redirects to the original (`mode=original`)
+  - returns the original (`raw=1`)
   - or proxies it and optionally resizes to WebP (`w/h/q`)
 
 ## Quickstart (local)
@@ -41,7 +41,7 @@ pnpm dev
   - `GET /:contract/:tokenId/image`
   - Returns: `image/*` (or WebP when resized)
   - Query:
-    - `mode=original`: 302 redirect to the source image URL
+    - `raw=1`: return the original image (no resize / no WebP). For remote URLs this is a 302 redirect; for `data:` URLs this returns the raw bytes.
     - `w`, `h`: max resize bounds (default 512, min 16, max 2048)
     - `q`: WebP quality (default 70, min 30, max 90)
     - `rpcUrl`: override the Ethereum RPC URL (optional)
