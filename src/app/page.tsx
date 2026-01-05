@@ -6,6 +6,8 @@ export default function Home() {
   const punksOriginalContract = "0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb";
   const punkTokenId = "2113";
   const repoUrl = "https://github.com/gwendall/onchainproxy";
+  const vercelDeployUrl = "https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fgwendall%2Fonchainproxy";
+  const railwayDeployUrl = "https://railway.app/new";
 
   const metadataParams = ["rpcUrl", "debug=1"] as const;
   const imageParams = ["raw=1", "svg=1", "w", "h", "q", "rpcUrl", "debug=1", "json=1"] as const;
@@ -20,6 +22,46 @@ export default function Home() {
           </p>
           <p className="text-foreground-muted">Built for the EVM. Supports Ethereum and major EVM L2s.</p>
         </header>
+
+        <Section title="Deploy">
+          <div className="space-y-3 text-foreground-muted">
+            <p className="text-foreground-faint">
+              This is a reference implementation. Self-hosting is recommended for production use.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <a
+                href={vercelDeployUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-2 rounded border border-foreground-faint/30 text-foreground hover:underline font-bold"
+              >
+                Deploy to Vercel
+              </a>
+              <a
+                href={railwayDeployUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-2 rounded border border-foreground-faint/30 text-foreground hover:underline font-bold"
+              >
+                Deploy to Railway
+              </a>
+            </div>
+            <p className="text-foreground-faint">
+              Open source on{" "}
+              <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="text-link hover:underline font-bold">
+                gwendall/onchainproxy
+              </a>{" "}
+              (MIT).
+            </p>
+            <p className="text-foreground-faint">
+              You can also use the hosted instance you’re on right now. I might add rate limiting / paid hosted option later; for now, feel free to use it.
+            </p>
+            <p className="text-foreground-faint">
+              Railway note: click “Deploy”, then pick “Deploy from GitHub” and select{" "}
+              <span className="text-foreground">gwendall/onchainproxy</span>.
+            </p>
+          </div>
+        </Section>
 
         <Section title="Supported chains">
           <p className="text-foreground-muted">

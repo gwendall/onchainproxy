@@ -4,6 +4,13 @@ Stable, cache-friendly URLs for on-chain asset metadata and images. Designed for
 
 Repo: `https://github.com/gwendall/onchainproxy` (MIT License)
 
+## Deploy
+
+- Vercel: `https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fgwendall%2Fonchainproxy`
+- Railway: `https://railway.app/new` (Deploy → Deploy from GitHub → select `gwendall/onchainproxy`)
+
+You can also use the hosted instance (this site). We might add rate limiting later; for now, feel free to use it.
+
 ## Supported chains
 
 Use any of these in the path as `/:chain`:
