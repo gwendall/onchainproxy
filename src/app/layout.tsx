@@ -15,12 +15,34 @@ const geistMono = Geist_Mono({
 });
 
 const siteUrl = (() => {
+  // Prefer explicit URLs.
   const raw = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL;
-  try {
-    return new URL(raw && raw.length > 0 ? raw : "http://localhost:3000");
-  } catch {
-    return new URL("http://localhost:3000");
+  if (raw && raw.length > 0) {
+    try {
+      return new URL(raw);
+    } catch {
+      // fall through
+    }
   }
+
+  // Platform fallbacks (to avoid OG images pointing to localhost in prod).
+  const vercelUrl = process.env.VERCEL_URL; // e.g. "my-app.vercel.app"
+  if (vercelUrl && vercelUrl.length > 0) return new URL(`https://${vercelUrl}`);
+
+  const railwayDomain =
+    process.env.RAILWAY_PUBLIC_DOMAIN
+    || process.env.RAILWAY_STATIC_URL
+    || process.env.RAILWAY_SERVICE_DOMAIN;
+  if (railwayDomain && railwayDomain.length > 0) {
+    // These envs vary; if they already include scheme, URL() handles it.
+    try {
+      return new URL(railwayDomain.startsWith("http") ? railwayDomain : `https://${railwayDomain}`);
+    } catch {
+      // fall through
+    }
+  }
+
+  return new URL("http://localhost:3000");
 })();
 
 export const viewport: Viewport = {
@@ -59,12 +81,28 @@ export const metadata: Metadata = {
     siteName: "OnChainProxy",
     locale: "en_US",
     type: "website",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "OnChainProxy",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "OnChainProxy",
     description: "Stable, cache-friendly URLs for on-chain asset metadata and images.",
     creator: "@gwendall",
+    images: [
+      {
+        url: "/twitter-image",
+        width: 1200,
+        height: 630,
+        alt: "OnChainProxy",
+      },
+    ],
   },
   icons: {
     icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
