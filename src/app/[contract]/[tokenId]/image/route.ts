@@ -9,6 +9,50 @@ import { resolveNftMetadata } from "@/lib/nft/metadata";
 
 export const runtime = "nodejs";
 
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
+
+const pickTokenName = (metadata: unknown): string | null => {
+  if (!isRecord(metadata)) return null;
+  const name = metadata["name"];
+  return typeof name === "string" && name.trim().length > 0 ? name.trim() : null;
+};
+
+const slugify = (input: string) => {
+  const s = input
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "") // diacritics
+    .replace(/[^\x20-\x7E]/g, "") // non-ascii
+    .trim()
+    .toLowerCase()
+    .replace(/['"]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return s.length > 0 ? s : "nft";
+};
+
+const extFromContentType = (contentType: string) => {
+  const ct = (contentType || "").toLowerCase();
+  if (ct.includes("image/webp")) return "webp";
+  if (ct.includes("image/png")) return "png";
+  if (ct.includes("image/jpeg") || ct.includes("image/jpg")) return "jpg";
+  if (ct.includes("image/gif")) return "gif";
+  if (ct.includes("image/svg")) return "svg";
+  if (ct.includes("image/bmp")) return "bmp";
+  if (ct.includes("image/avif")) return "avif";
+  return "bin";
+};
+
+const setInlineFilename = (headers: Headers, filenameBase: string, tokenId: string, contentType: string) => {
+  const ext = extFromContentType(contentType);
+  const base = filenameBase || "nft";
+  // Avoid doubling the tokenId when metadata name already contains it (e.g. "meebit-14076").
+  const needsTokenSuffix = !(base === tokenId || base.endsWith(`-${tokenId}`) || base.endsWith(tokenId));
+  const fullBase = needsTokenSuffix ? `${base}-${tokenId}` : base;
+  // inline keeps normal rendering, but browsers often reuse filename on "Save image as..."
+  headers.set("Content-Disposition", `inline; filename="${fullBase}.${ext}"`);
+};
+
 const debugError = (e: unknown) => {
   if (e instanceof Error) {
     const anyErr = e as unknown as { cause?: unknown };
@@ -70,6 +114,9 @@ export const GET = async (
     const imageUrl = meta.imageUrl;
     if (!imageUrl) return sendSvgFallback(404, "No image");
 
+    const tokenName = pickTokenName(meta.metadata);
+    const filenameBase = slugify(tokenName ?? contract.slice(0, 6));
+
     if (wantOriginal) {
       // Redirect when possible, but for data: URLs return the bytes directly.
       if (!imageUrl.startsWith("data:")) {
@@ -106,6 +153,7 @@ export const GET = async (
         headers.set("Content-Type", decoded.mime);
         headers.set("ETag", etag);
         setCacheControl(headers, cacheSeconds);
+        setInlineFilename(headers, filenameBase, tokenId, decoded.mime);
         return new Response(new Uint8Array(decoded.body), { status: 200, headers });
       }
 
@@ -120,6 +168,7 @@ export const GET = async (
       headers.set("Content-Type", "image/webp");
       headers.set("ETag", etag);
       setCacheControl(headers, cacheSeconds);
+      setInlineFilename(headers, filenameBase, tokenId, "image/webp");
       return new Response(new Uint8Array(transformed), { status: 200, headers });
     }
 
@@ -151,6 +200,7 @@ export const GET = async (
       if (fetched.contentType) headers.set("Content-Type", fetched.contentType);
       headers.set("ETag", etag);
       setCacheControl(headers, cacheSeconds);
+      setInlineFilename(headers, filenameBase, tokenId, fetched.contentType);
       return new Response(new Uint8Array(fetched.body), { status: 200, headers });
     }
 
@@ -166,6 +216,7 @@ export const GET = async (
     headers.set("Content-Type", "image/webp");
     headers.set("ETag", etag);
     setCacheControl(headers, cacheSeconds);
+    setInlineFilename(headers, filenameBase, tokenId, "image/webp");
     return new Response(new Uint8Array(transformed), { status: 200, headers });
   } catch (e) {
     console.error("[image] failed", e);
