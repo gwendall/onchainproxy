@@ -4,6 +4,12 @@ Stable, cache-friendly URLs for on-chain asset metadata and images. Designed for
 
 Repo: `https://github.com/gwendall/onchainproxy` (MIT License)
 
+Docs: `https://onchainproxy.io`
+
+## Apps built with OnChainProxy
+
+- **OnChain Scanner** (`https://onchainproxy.io/scanner`): Scan a wallet’s NFTs and check which metadata/images are live vs down.
+
 ## Deploy
 
 - Vercel: `https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fgwendall%2Fonchainproxy`
