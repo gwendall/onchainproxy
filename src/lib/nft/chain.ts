@@ -11,9 +11,9 @@ export type SupportedChain =
 
 export const SUPPORTED_CHAINS: SupportedChain[] = [
   "eth",
+  "base",
   "arb",
   "op",
-  "base",
   "polygon",
   "zksync",
   "linea",
