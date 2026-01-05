@@ -277,6 +277,17 @@ export default function Home() {
           </ul>
         </Section>
 
+        <Section title="Apps built with OnChainProxy">
+          <div className="space-y-3 text-foreground-muted">
+            <a href="/scanner" className="text-link hover:underline font-bold">
+              OnChain Scanner
+            </a>
+            <p className="text-foreground-faint">
+              Scan a wallet’s NFTs and check which metadata/images are live vs down.
+            </p>
+          </div>
+        </Section>
+
         <footer className="text-foreground-muted">
           Made by{" "}
           <a
