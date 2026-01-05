@@ -1,5 +1,6 @@
 import { Section } from "@/components/Section";
 import { SUPPORTED_CHAINS } from "@/lib/nft/chain";
+import { Square } from "lucide-react";
 
 export default function Home() {
   const chain = "eth";
@@ -8,6 +9,14 @@ export default function Home() {
   const repoUrl = "https://github.com/gwendall/onchainproxy";
   const vercelDeployUrl = "https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fgwendall%2Fonchainproxy";
   const railwayDeployUrl = "https://railway.app/new";
+
+  const appsBuiltWithOnchainProxy = [
+    {
+      title: "OnChain Scanner",
+      href: "/scanner",
+      description: "Scan a wallet’s NFTs and check which metadata/images are live vs down.",
+    },
+  ] as const;
 
   const metadataParams = ["rpcUrl", "debug=1"] as const;
   const imageParams = ["raw=1", "svg=1", "w", "h", "q", "rpcUrl", "debug=1", "json=1"] as const;
@@ -278,13 +287,19 @@ export default function Home() {
         </Section>
 
         <Section title="Apps built with OnChainProxy">
-          <div className="space-y-3 text-foreground-muted">
-            <a href="/scanner" className="text-link hover:underline font-bold">
-              OnChain Scanner
-            </a>
-            <p className="text-foreground-faint">
-              Scan a wallet’s NFTs and check which metadata/images are live vs down.
-            </p>
+          <div className="space-y-4 text-foreground-muted">
+            {appsBuiltWithOnchainProxy.map((app) => (
+              <div key={app.href} className="space-y-2">
+                <a
+                  href={app.href}
+                  className="inline-flex items-center gap-2 leading-none text-link hover:underline font-bold"
+                >
+                  <Square className="w-4 h-4 shrink-0 text-foreground-faint" />
+                  <span className="leading-none">{app.title}</span>
+                </a>
+                <p className="text-foreground-faint">{app.description}</p>
+              </div>
+            ))}
           </div>
         </Section>
 

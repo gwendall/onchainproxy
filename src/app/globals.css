@@ -61,6 +61,11 @@ a {
   word-break: break-word;
 }
 
+/* Tailwind v4 uses :where() (0 specificity) for utilities like inline-flex.
+   Ensure links can opt into flex layouts when needed. */
+a.inline-flex { display: inline-flex; }
+a.flex { display: flex; }
+
 /* Base font-size for mobile (and anything < lg). */
 html { font-size: 15px; }
 

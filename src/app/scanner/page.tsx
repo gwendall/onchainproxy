@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Section } from "@/components/Section";
 import { scanNfts, checkNftStatus } from "./actions";
+import { ArrowLeft, ArrowUpRight } from "lucide-react";
 
 type NftItem = {
   contract: string;
@@ -151,6 +152,10 @@ export default function ScannerPage() {
     <main className="min-h-screen max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 font-mono text-sm">
       <div className="space-y-8 sm:space-y-10">
         <header className="space-y-3">
+          <a href="/" className="inline-flex items-center gap-1 leading-none text-foreground-faint hover:underline">
+            <ArrowLeft className="w-4 h-4 shrink-0" />
+            <span className="leading-none">Back to docs</span>
+          </a>
           <h1 className="font-bold">NFT Scanner</h1>
           <p className="text-foreground-muted">
             Enter an Ethereum address to scan owned NFTs and check if their metadata and images are live.
@@ -281,9 +286,10 @@ export default function ScannerPage() {
                             href={`https://opensea.io/assets/ethereum/${nft.contract}/${nft.tokenId}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="shrink-0 text-foreground-faint/70 hover:text-foreground hover:underline transition-colors"
+                            className="shrink-0 inline-flex items-center gap-1 text-foreground-faint/70 hover:text-foreground hover:underline transition-colors"
                           >
-                            OpenSea ↗
+                            <span>OpenSea</span>
+                            <ArrowUpRight className="w-4 h-4" />
                           </a>
                         </div>
                         
