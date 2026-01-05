@@ -7,12 +7,22 @@ export default function Home() {
       <header className="mb-12">
         <h1 className="font-bold mb-3">NFT PROXY</h1>
         <p className="text-foreground-muted">
-          Developer-friendly endpoints to fetch NFT metadata + images (IPFS + caching included).
+          Lightweight endpoints for NFT metadata + images — designed for thumbnails and UI.
+        </p>
+        <p className="mt-3 text-foreground-muted">
+          The problem: fetching NFT images is slow and flaky (IPFS gateways, huge images, random hosts). The naive
+          solution is to build an indexer + a database. This is the opposite: a tiny origin that always returns the
+          freshest URI from the chain, then lets caching do the heavy lifting.
         </p>
         <ul className="mt-4 list-disc pl-5 space-y-1 text-foreground-muted">
-          <li>Source of truth is the chain: resolves <span className="text-foreground">tokenURI/uri</span> via read-only RPC calls.</li>
-          <li>No indexer, no database: metadata + images are fetched from the token’s URI (HTTP/IPFS/data:).</li>
-          <li>Cache-friendly responses (ETag + Cache-Control) + optional WebP resizing.</li>
+          <li>
+            Source of truth is the chain: resolves <span className="text-foreground">tokenURI/uri</span> via read-only
+            RPC calls.
+          </li>
+          <li>
+            Extremely lightweight: no indexer, no database — just fetch, normalize, and return a stable URL per token.
+          </li>
+          <li>Acts like a “hidden CDN”: ETag + Cache-Control enable fast edge/browser caching.</li>
         </ul>
       </header>
 

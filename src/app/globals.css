@@ -40,3 +40,15 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Base font-size for mobile (and anything < lg). */
+html { font-size: 15px; }
+
+/* Desktop: back to the tighter original sizing. */
+@media (min-width: 1024px) {
+  html {
+    font-size: 13px;
+    --body-leading: 1.5;
+    --content-leading: 1.55; /* tighter on desktop */
+  }
+}
