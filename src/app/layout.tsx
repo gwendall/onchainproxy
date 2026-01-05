@@ -38,6 +38,7 @@ export const metadata: Metadata = {
   description: "NFT metadata + image proxy with smart caching.",
   applicationName: "nft-proxy",
   keywords: [
+    "Ethereum",
     "NFT",
     "ERC721",
     "ERC1155",
