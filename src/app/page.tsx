@@ -28,7 +28,7 @@ export default function Home() {
           </p>
         </Section>
 
-        <Section title="Big picture">
+        <Section title="At a broader level">
           <p className="text-foreground-muted">
             If digital art and on-chain assets are meant to last, their interfaces need to be more resilient
             than the platforms that serve them. Today, much of NFT UX still depends on centralized services sitting
