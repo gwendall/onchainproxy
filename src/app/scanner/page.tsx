@@ -9,6 +9,8 @@ import { scanNfts, checkNftStatus } from "./actions";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { SUPPORTED_CHAINS, type SupportedChain } from "@/lib/nft/chain";
 
+type ErrorSource = "rpc" | "contract" | "metadata_fetch" | "parsing" | "image_fetch" | "unknown";
+
 type NftItem = {
   contract: string;
   tokenId: string;
@@ -18,8 +20,11 @@ type NftItem = {
   thumbnailUrl?: string;
   status?: "pending" | "scanning" | "ok" | "error";
   error?: string;
+  errorSource?: ErrorSource;
+  isTransient?: boolean;
   metadataStatus?: "ok" | "error";
   imageStatus?: "ok" | "error";
+  imageError?: string;
 };
 
 const shortAddress = (addr: string) => {
@@ -140,10 +145,13 @@ export default function ScannerPage() {
     const total = nfts.length;
     const scanned = nfts.filter((n) => n.status === "ok" || n.status === "error").length;
     const metadataLive = nfts.filter((n) => n.metadataStatus === "ok").length;
-    const metadataDown = nfts.filter((n) => n.metadataStatus === "error").length;
+    const metadataDown = nfts.filter((n) => n.metadataStatus === "error" && !n.isTransient).length;
+    const metadataUnknown = nfts.filter((n) => n.metadataStatus === "error" && n.isTransient).length;
     const imageLive = nfts.filter((n) => n.imageStatus === "ok").length;
-    const imageDown = nfts.filter((n) => n.imageStatus === "error").length;
-    const errors = nfts.filter((n) => n.status === "error").length;
+    const imageDown = nfts.filter((n) => n.imageStatus === "error" && !n.imageError).length;
+    const imageUnknown = nfts.filter((n) => n.imageStatus === "error" && n.imageError).length;
+    const errors = nfts.filter((n) => n.status === "error" && !n.isTransient).length;
+    const transientErrors = nfts.filter((n) => n.status === "error" && n.isTransient).length;
 
     const scannedOrTotal = scanned > 0 ? scanned : total;
     const pct = (num: number, den: number) => {
@@ -153,7 +161,10 @@ export default function ScannerPage() {
 
     const metadataBrokenPct = pct(metadataDown, scannedOrTotal);
     const imageBrokenPct = pct(imageDown, scannedOrTotal);
-    const brokenAssets = nfts.filter((n) => n.metadataStatus === "error" || n.imageStatus === "error").length;
+    const brokenAssets = nfts.filter((n) => 
+      (n.metadataStatus === "error" && !n.isTransient) || 
+      (n.imageStatus === "error" && !n.imageError)
+    ).length;
     const brokenAssetsPct = pct(brokenAssets, scannedOrTotal);
 
     return {
@@ -162,9 +173,12 @@ export default function ScannerPage() {
       progressPct: pct(scanned, total),
       metadataLive,
       metadataDown,
+      metadataUnknown,
       imageLive,
       imageDown,
+      imageUnknown,
       errors,
+      transientErrors,
       metadataBrokenPct,
       imageBrokenPct,
       brokenAssets,
@@ -212,7 +226,7 @@ export default function ScannerPage() {
       const next = [...prev];
       const it = next[idx];
       if (!it) return prev;
-      next[idx] = { ...it, status: "scanning", error: undefined };
+      next[idx] = { ...it, status: "scanning", error: undefined, errorSource: undefined, isTransient: undefined };
       return next;
     });
 
@@ -229,7 +243,10 @@ export default function ScannerPage() {
           status: status.ok ? "ok" : "error",
           metadataStatus: status.metadataOk ? "ok" : "error",
           imageStatus: status.imageOk ? "ok" : "error",
-          error: status.ok ? undefined : status.error,
+          error: status.error,
+          errorSource: status.errorSource,
+          isTransient: status.isTransient,
+          imageError: status.imageError,
         };
         return next;
       });
@@ -243,6 +260,8 @@ export default function ScannerPage() {
           ...it,
           status: "error",
           error: "Check failed",
+          errorSource: "unknown",
+          isTransient: true,
           metadataStatus: "error",
           imageStatus: "error",
         };
@@ -529,26 +548,31 @@ export default function ScannerPage() {
                     {stats.scanned}/{stats.total}
                    </div>
                 </div>
-                {stats.errors > 0 && (
-                  <div className="space-y-1">
-                    <div className="text-foreground-faint">Errors</div>
-                    <div className="text-red-500 font-bold">{stats.errors}</div>
-                  </div>
-                )}
                 <div className="space-y-1">
                   <div className="text-foreground-faint">Broken Assets</div>
                   <div className="flex items-center gap-2">
-                    <span className="text-foreground font-bold">{stats.brokenAssets}</span>
-                    <span className="text-red-500">({stats.brokenAssetsPct}%)</span>
+                    <span className="text-red-500 font-bold">{stats.brokenAssets}</span>
+                    <span className="text-foreground-faint">({stats.brokenAssetsPct}%)</span>
                   </div>
                 </div>
+                {stats.transientErrors > 0 && (
+                  <div className="space-y-1">
+                    <div className="text-foreground-faint" title="Errors that may resolve on retry (RPC issues, timeouts)">Uncertain</div>
+                    <div className="text-yellow-600 font-bold">{stats.transientErrors}</div>
+                  </div>
+                )}
                 <div className="space-y-1">
                   <div className="text-foreground-faint">Metadata</div>
                   <div className="flex items-center gap-2">
                     <span className="text-green-500">{stats.metadataLive}</span>
                     <span className="text-foreground-faint">/</span>
                     <span className="text-red-500">{stats.metadataDown}</span>
-                    <span className="text-foreground-faint">({stats.metadataBrokenPct}%)</span>
+                    {stats.metadataUnknown > 0 && (
+                      <>
+                        <span className="text-foreground-faint">/</span>
+                        <span className="text-yellow-600" title="Transient errors">{stats.metadataUnknown}?</span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-1">
@@ -557,7 +581,12 @@ export default function ScannerPage() {
                     <span className="text-green-500">{stats.imageLive}</span>
                     <span className="text-foreground-faint">/</span>
                     <span className="text-red-500">{stats.imageDown}</span>
-                    <span className="text-foreground-faint">({stats.imageBrokenPct}%)</span>
+                    {stats.imageUnknown > 0 && (
+                      <>
+                        <span className="text-foreground-faint">/</span>
+                        <span className="text-yellow-600" title="Transient errors">{stats.imageUnknown}?</span>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -632,8 +661,24 @@ export default function ScannerPage() {
                           </a>
                         </div>
                         
-                        {nft.error ? (
-                          <div className="text-red-500">{nft.error}</div>
+                        {(nft.error || nft.imageError) ? (
+                          <div className="text-sm space-y-0.5">
+                            {nft.error && (
+                              <div className={nft.isTransient ? "text-yellow-600" : "text-red-500"}>
+                                {nft.isTransient && <span title="Transient error - may resolve on retry">⚠ </span>}
+                                {nft.errorSource === "rpc" && "RPC: "}
+                                {nft.errorSource === "contract" && "Contract: "}
+                                {nft.errorSource === "metadata_fetch" && "Metadata: "}
+                                {nft.errorSource === "parsing" && "Parse: "}
+                                {nft.error}
+                              </div>
+                            )}
+                            {nft.imageError && (
+                              <div className="text-yellow-600">
+                                Image: {nft.imageError}
+                              </div>
+                            )}
+                          </div>
                         ) : null}
                       </div>
 
@@ -644,11 +689,11 @@ export default function ScannerPage() {
                           <div className="text-blue-500 animate-pulse">SCANNING</div>
                         ) : (
                           <div className="flex flex-wrap justify-end sm:flex-col sm:items-end gap-x-4 gap-y-1">
-                            <div className={nft.metadataStatus === "ok" ? "text-green-600" : "text-red-500 font-bold"}>
-                              META: {nft.metadataStatus === "ok" ? "OK" : "ERR"}
+                            <div className={nft.metadataStatus === "ok" ? "text-green-600" : nft.isTransient ? "text-yellow-600" : "text-red-500 font-bold"}>
+                              META: {nft.metadataStatus === "ok" ? "OK" : nft.isTransient ? "?" : "ERR"}
                             </div>
-                            <div className={nft.imageStatus === "ok" ? "text-green-600" : "text-red-500 font-bold"}>
-                              IMG: {nft.imageStatus === "ok" ? "OK" : "ERR"}
+                            <div className={nft.imageStatus === "ok" ? "text-green-600" : nft.imageError ? "text-yellow-600" : "text-red-500 font-bold"}>
+                              IMG: {nft.imageStatus === "ok" ? "OK" : nft.imageError ? "?" : "ERR"}
                             </div>
                             <button
                               type="button"

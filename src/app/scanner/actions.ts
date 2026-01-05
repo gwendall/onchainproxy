@@ -160,43 +160,147 @@ export async function scanNfts(addressOrEns: string, chain: SupportedChain) {
   }
 }
 
-export async function checkNftStatus(chain: string, contract: string, tokenId: string) {
+type ErrorSource = "rpc" | "contract" | "metadata_fetch" | "parsing" | "image_fetch" | "unknown";
+
+const classifyError = (e: unknown): { source: ErrorSource; message: string; isTransient: boolean } => {
+  if (!(e instanceof Error)) {
+    return { source: "unknown", message: "Unknown error", isTransient: false };
+  }
+
+  const msg = e.message.toLowerCase();
+  const cause = (e as { cause?: unknown }).cause;
+
+  // RPC/Network errors - likely transient, retry later
+  if (
+    msg.includes("timeout") ||
+    msg.includes("aborted") ||
+    msg.includes("fetch") ||
+    msg.includes("network") ||
+    msg.includes("rpc http") ||
+    msg.includes("rpc eth_call failed")
+  ) {
+    return { source: "rpc", message: e.message, isTransient: true };
+  }
+
+  // Contract errors - permanent, contract doesn't support the interface or token doesn't exist
+  if (
+    msg.includes("revert") ||
+    msg.includes("execution reverted") ||
+    msg.includes("call exception") ||
+    msg.includes("failed to resolve token metadata uri")
+  ) {
+    // Check if all attempts failed - might be RPC issue masquerading as contract error
+    const attempts = (cause as { attempts?: Array<{ error: string }> })?.attempts;
+    const allRpcErrors = attempts?.every((a) =>
+      a.error.toLowerCase().includes("timeout") ||
+      a.error.toLowerCase().includes("rpc http")
+    );
+    if (allRpcErrors) {
+      return { source: "rpc", message: "All RPC endpoints failed", isTransient: true };
+    }
+    return { source: "contract", message: e.message, isTransient: false };
+  }
+
+  // Metadata fetch errors - could be transient (server down) or permanent (404)
+  if (msg.includes("metadata fetch failed")) {
+    const status = msg.match(/\((\d+)\)/)?.[1];
+    const isTransient = status ? !["400", "404", "410"].includes(status) : true;
+    return { source: "metadata_fetch", message: e.message, isTransient };
+  }
+
+  // Parsing/validation errors - permanent
+  if (
+    msg.includes("invalid contract") ||
+    msg.includes("invalid tokenid") ||
+    msg.includes("bad metadata data url") ||
+    msg.includes("no metadata url") ||
+    msg.includes("bad rpc result")
+  ) {
+    return { source: "parsing", message: e.message, isTransient: false };
+  }
+
+  return { source: "unknown", message: e.message, isTransient: false };
+};
+
+export type NftStatusResult = {
+  ok: boolean;
+  metadataOk: boolean;
+  imageOk: boolean;
+  error?: string;
+  errorSource?: ErrorSource;
+  isTransient?: boolean;
+  imageError?: string;
+  imageErrorSource?: ErrorSource;
+};
+
+export async function checkNftStatus(chain: string, contract: string, tokenId: string): Promise<NftStatusResult> {
+  let metadataResult;
+  
   try {
-    const metadataResult = await resolveNftMetadata({
+    metadataResult = await resolveNftMetadata({
       chain: chain as SupportedChain,
       contract,
       tokenId,
       rpcUrlQuery: null,
       cacheTtlMs: 60 * 1000,
     });
+  } catch (e: unknown) {
+    const { source, message, isTransient } = classifyError(e);
+    return {
+      ok: false,
+      metadataOk: false,
+      imageOk: false,
+      error: message,
+      errorSource: source,
+      isTransient,
+    };
+  }
 
-    let imageOk = false;
+  // Metadata resolved successfully, now check image
+  let imageOk = false;
+  let imageError: string | undefined;
+  let imageErrorSource: ErrorSource | undefined;
 
-    if (metadataResult.imageUrl) {
-      try {
-        const res = await fetch(metadataResult.imageUrl, {
-          method: "HEAD",
+  if (metadataResult.imageUrl) {
+    try {
+      const res = await fetch(metadataResult.imageUrl, {
+        method: "HEAD",
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        imageOk = true;
+      } else {
+        // Some servers block HEAD, try GET with range
+        const resGet = await fetch(metadataResult.imageUrl, {
+          method: "GET",
+          headers: { Range: "bytes=0-10" },
           signal: AbortSignal.timeout(5000),
         });
-        if (res.ok) {
+        if (resGet.ok) {
           imageOk = true;
         } else {
-          // Some servers block HEAD, try GET with range
-          const resGet = await fetch(metadataResult.imageUrl, {
-            method: "GET",
-            headers: { Range: "bytes=0-10" },
-            signal: AbortSignal.timeout(5000),
-          });
-          if (resGet.ok) imageOk = true;
+          imageError = `Image fetch failed (${resGet.status})`;
+          imageErrorSource = "image_fetch";
         }
-      } catch {
-        // Image fetch failed
       }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      const isNetwork = msg.toLowerCase().includes("timeout") || 
+                       msg.toLowerCase().includes("abort") ||
+                       msg.toLowerCase().includes("fetch");
+      imageError = msg;
+      imageErrorSource = isNetwork ? "rpc" : "image_fetch";
     }
-
-    return { ok: true, metadataOk: true, imageOk };
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : "Unknown error";
-    return { ok: false, metadataOk: false, imageOk: false, error: message };
+  } else {
+    // No image URL in metadata - this might be intentional (e.g. some NFTs)
+    imageOk = true; // Don't mark as error if there's simply no image field
   }
+
+  return {
+    ok: true,
+    metadataOk: true,
+    imageOk,
+    imageError,
+    imageErrorSource,
+  };
 }
