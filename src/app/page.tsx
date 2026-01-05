@@ -25,11 +25,15 @@ export default function Home() {
             freshest <span className="text-foreground">tokenURI/uri</span> from Ethereum at request time, then lets
             caching do the heavy lifting.
           </p>
+        </div>
+
+        <div className="mt-10 space-y-3">
+          <h2 className="font-bold">Big picture</h2>
           <p className="text-foreground-muted">
-            Big picture: much of NFT UX depends on centralized indexers and marketplace APIs. When one goes down (or
-            sunsets), it can domino into many apps. I built NFTProxy after relying on Reservoir for UI images — when their
-            API shut down, my apps suddenly lost data. This proxy helps make interfaces more resilient by always falling
-            back to on-chain truth, with cacheable HTTP as the “distribution layer”.
+            If digital art and on-chain assets are meant to last, their interfaces need to be more resilient
+            than the platforms that serve them. Today, much of NFT UX still depends on centralized services sitting
+            between users and the chain. NFTProxy is a small step toward reducing that dependency — by making on-chain
+            data directly consumable over cacheable HTTP, without introducing new state or infrastructure.
           </p>
           <p className="text-foreground-muted">
             Non-goals: indexing, persistence, analytics, ownership history, or marketplace APIs.
