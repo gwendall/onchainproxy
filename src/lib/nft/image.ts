@@ -7,6 +7,19 @@ type FetchImageResult = {
   body: Buffer;
 };
 
+const startsWithAscii = (buf: Buffer, ascii: string) => {
+  if (buf.length < ascii.length) return false;
+  return buf.toString("ascii", 0, ascii.length) === ascii;
+};
+
+const looksLikeGif = (buf: Buffer) => startsWithAscii(buf, "GIF87a") || startsWithAscii(buf, "GIF89a");
+
+const looksLikeSvg = (buf: Buffer) => {
+  // Very cheap sniff: check first ~1KB for an <svg ...> tag (after trimming BOM/whitespace).
+  const head = buf.subarray(0, 1024).toString("utf8").trimStart();
+  return head.startsWith("<svg") || head.startsWith("<?xml") && head.includes("<svg");
+};
+
 const imageFetchCache = new LruTtlCache<string, FetchImageResult>({
   maxEntries: 500,
 });
@@ -58,11 +71,16 @@ export const maybeResizeToWebp = async (params: {
   allowSvgRasterize?: boolean;
 }) => {
   const safeContentType = typeof params.inputContentType === "string" ? params.inputContentType : "";
-  const isSvg = safeContentType.includes("image/svg");
-  const isGif = safeContentType.includes("image/gif");
-  const isImage = safeContentType.startsWith("image/");
+  const ct = safeContentType.toLowerCase();
 
-  if ((isSvg && !params.allowSvgRasterize) || isGif || !isImage) return null;
+  const isSvg = ct.includes("image/svg") || (ct.length === 0 || ct.includes("octet-stream")) && looksLikeSvg(params.input);
+  const isGif = ct.includes("image/gif") || (ct.length === 0 || ct.includes("octet-stream")) && looksLikeGif(params.input);
+
+  // Some gateways (esp. IPFS) serve images as `application/octet-stream` (or omit content-type).
+  // sharp can still decode based on magic bytes, so treat "unknown" as possibly-image.
+  const isImageish = ct.startsWith("image/") || ct.length === 0 || ct.includes("octet-stream");
+
+  if ((isSvg && !params.allowSvgRasterize) || isGif || !isImageish) return null;
 
   const inputId = computeWeakEtag(params.input);
   const key = `${params.width}x${params.height}:q${params.quality}:svg${params.allowSvgRasterize ? 1 : 0}:${safeContentType}:${inputId}`;
@@ -79,9 +97,16 @@ export const maybeResizeToWebp = async (params: {
         width: params.width,
         height: params.height,
         fit: "inside",
-        withoutEnlargement: true,
+        // For raster inputs, avoid upscaling.
+        // For SVGs, upscaling is expected (vector), otherwise thumbnails can end up tiny.
+        withoutEnlargement: !isSvg,
       })
-      .webp({ quality: params.quality })
+      .webp(
+        isSvg
+          // SVG -> lossless WebP to avoid compression artifacts (sharp edges, flat colors).
+          ? { lossless: true, quality: 100 }
+          : { quality: params.quality },
+      )
       .toBuffer();
 
   let output: Buffer | null = null;
