@@ -451,7 +451,7 @@ export default function ScannerPage() {
   }, [inputTrimmed, submittedAddress, loading, isScanning, scanStartedAt, selectedChain, isChainSupportedForWallet]);
 
   return (
-    <main className="min-h-screen max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 font-mono text-sm">
+    <main className="min-h-screen max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 font-mono">
       <div className="space-y-8 sm:space-y-10">
         <header className="space-y-3">
           <a href="/" className="inline-flex items-center gap-1 leading-none text-foreground-faint hover:underline">
@@ -617,7 +617,7 @@ export default function ScannerPage() {
                             }}
                           />
                         ) : (
-                           <div className="w-full h-full flex items-center justify-center text-foreground-faint/30 font-bold text-xs">IMG</div>
+                           <div className="w-full h-full flex items-center justify-center text-foreground-faint/30 font-bold">IMG</div>
                         )}
                       </div>
 
@@ -631,7 +631,7 @@ export default function ScannerPage() {
                           </div>
                         ) : null}
                         
-                        <div className="text-foreground-faint flex items-center gap-x-3 min-w-0 text-xs sm:text-sm">
+                        <div className="text-foreground-faint flex items-center gap-x-3 min-w-0">
                           <span className="shrink-0 font-mono">{shortAddress(nft.contract)}</span>
                           <span className="min-w-0 truncate" title={`Token #${nft.tokenId}`}>
                             #{nft.tokenId}

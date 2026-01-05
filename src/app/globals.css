@@ -66,13 +66,14 @@ a {
 a.inline-flex { display: inline-flex; }
 a.flex { display: flex; }
 
-/* Base font-size for mobile (and anything < lg). */
-html { font-size: 15px; }
+/* Base font-size.
+   Keep >= 16px to prevent iOS Safari zooming when focusing inputs. */
+html { font-size: 16px; }
 
-/* Desktop: back to the tighter original sizing. */
+/* Desktop: keep the same base size; only adjust leading variables. */
 @media (min-width: 1024px) {
   html {
-    font-size: 13px;
+    font-size: 16px;
     --body-leading: 1.5;
     --content-leading: 1.55; /* tighter on desktop */
   }
