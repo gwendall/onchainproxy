@@ -1,6 +1,8 @@
 # nft-proxy
 
-Developer-friendly endpoints to fetch **Ethereum NFT metadata** and **images** without worrying about IPFS, CORS, remote domains, or flaky RPCs.
+Developer-friendly endpoints to fetch **EVM NFT metadata** and **images** without worrying about IPFS, CORS, remote domains, or flaky RPCs.
+
+Currently: **Ethereum only** (use `eth`). L2s coming.
 
 It:
 - resolves `tokenURI()` / `uri()` (ERC-721 + ERC-1155)
@@ -31,15 +33,19 @@ pnpm dev
 ## Endpoints (HTTP)
 
 - **Metadata**
-  - `GET /:contract/:tokenId`
+  - `GET /:chain/:contract/:tokenId`
   - Returns: JSON (includes resolved `metadataUrl`, parsed `metadata`, and `imageUrl` when available)
+  - Path:
+    - `chain`: currently `eth` (Ethereum). L2s coming.
   - Query:
     - `rpcUrl`: override the Ethereum RPC URL (optional)
     - `debug=1`: extra error details (dev only)
 
 - **Image**
-  - `GET /:contract/:tokenId/image`
+  - `GET /:chain/:contract/:tokenId/image`
   - Returns: `image/webp` **when possible** (thumbnail-optimized). Falls back to the original format when WebP transform is not available.
+  - Path:
+    - `chain`: currently `eth` (Ethereum). L2s coming.
   - Query:
     - `raw=1`: return the original image (no resize / no WebP). For remote URLs this is a 302 redirect; for `data:` URLs this returns the raw bytes.
     - `svg=1`: **SVG escape hatch**. Keep SVG as SVG (vector) while still proxying it from this origin (no WebP rasterization). This exists for the niche case where you want same-origin SVG bytes without a redirect. (If you don’t care, ignore it.)
@@ -51,9 +57,9 @@ pnpm dev
 ## Examples (Meebits)
 
 ```bash
-curl 'http://localhost:3000/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076'
-curl 'http://localhost:3000/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076/image?w=512&h=512&q=70'
-curl -I 'http://localhost:3000/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076/image?w=512&h=512&q=70'
+curl 'http://localhost:3000/eth/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076'
+curl 'http://localhost:3000/eth/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076/image?w=512&h=512&q=70'
+curl -I 'http://localhost:3000/eth/0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7/14076/image?w=512&h=512&q=70'
 ```
 
 ## Caching (what to expect)

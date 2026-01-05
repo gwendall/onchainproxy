@@ -1,4 +1,5 @@
 export default function Home() {
+  const chain = "eth";
   const meebitsContract = "0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7";
   const meebitsTokenId = "14076";
 
@@ -12,6 +13,9 @@ export default function Home() {
         <p className="text-foreground-muted">
           Stable, cache-friendly URLs for NFT images and metadata.
           Designed for thumbnails, wallets, and UI.
+        </p>
+        <p className="mt-3 text-foreground-muted">
+          Built for the EVM. Currently supports Ethereum only. L2s coming.
         </p>
         <div className="mt-10 space-y-3">
           <h2 className="font-bold">Why NFTProxy exists</h2>
@@ -62,7 +66,7 @@ export default function Home() {
           <div>
             <div>
               <span className="text-foreground">GET</span>{" "}
-              <span className="text-foreground">/:contract/:tokenId</span>
+              <span className="text-foreground">/:chain/:contract/:tokenId</span>
             </div>
             <div className="text-foreground-faint">Returns JSON metadata (and the resolved image URL).</div>
             <div className="mt-1 text-foreground-faint">
@@ -76,7 +80,7 @@ export default function Home() {
           <div>
             <div>
               <span className="text-foreground">GET</span>{" "}
-              <span className="text-foreground">/:contract/:tokenId/image</span>
+              <span className="text-foreground">/:chain/:contract/:tokenId/image</span>
             </div>
             <div className="text-foreground-faint">Returns WebP when possible (thumbnail-optimized).</div>
             <div className="mt-1 text-foreground-faint">
@@ -99,18 +103,18 @@ export default function Home() {
         <ul className="list-disc pl-5 space-y-1 text-foreground-muted">
           <li>
             <a
-              href={`/${meebitsContract}/${meebitsTokenId}`}
+              href={`/${chain}/${meebitsContract}/${meebitsTokenId}`}
               className="text-link hover:underline font-bold"
             >
-              /{meebitsContract}/{meebitsTokenId}
+              /{chain}/{meebitsContract}/{meebitsTokenId}
             </a>
           </li>
           <li>
             <a
-              href={`/${meebitsContract}/${meebitsTokenId}/image?w=512&h=512&q=70`}
+              href={`/${chain}/${meebitsContract}/${meebitsTokenId}/image?w=512&h=512&q=70`}
               className="text-link hover:underline font-bold"
             >
-              /{meebitsContract}/{meebitsTokenId}/image?w=512&h=512&q=70
+              /{chain}/{meebitsContract}/{meebitsTokenId}/image?w=512&h=512&q=70
             </a>
           </li>
         </ul>
@@ -121,8 +125,12 @@ export default function Home() {
 
         <div className="space-y-4 text-foreground-muted">
           <div>
-            <div className="text-foreground">GET /:contract/:tokenId</div>
+            <div className="text-foreground">GET /:chain/:contract/:tokenId</div>
             <ul className="mt-1 list-disc pl-5 space-y-1">
+              <li>
+                <span className="text-foreground">chain</span>: currently{" "}
+                <span className="text-foreground">eth</span> (Ethereum). L2s coming.
+              </li>
               <li>
                 <span className="text-foreground">rpcUrl</span>: override the Ethereum RPC URL (optional)
               </li>
@@ -133,8 +141,12 @@ export default function Home() {
           </div>
 
           <div>
-            <div className="text-foreground">GET /:contract/:tokenId/image</div>
+            <div className="text-foreground">GET /:chain/:contract/:tokenId/image</div>
             <ul className="mt-1 list-disc pl-5 space-y-1">
+              <li>
+                <span className="text-foreground">chain</span>: currently{" "}
+                <span className="text-foreground">eth</span> (Ethereum). L2s coming.
+              </li>
               <li>
                 <span className="text-foreground">raw=1</span>: return the original image (no resize / no WebP)
               </li>

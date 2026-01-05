@@ -5,6 +5,7 @@ import { decodeDataUrlToBuffer } from "@/lib/nft/dataUrl";
 import { resolveErc1155TemplateUri } from "@/lib/nft/erc1155";
 import { ipfsToHttp } from "@/lib/nft/ipfs";
 import { resolveTokenMetadataUri } from "@/lib/nft/rpc";
+import type { SupportedChain } from "@/lib/nft/chain";
 import type { NftMetadataResult } from "@/lib/nft/types";
 
 const isRecord = (v: unknown): v is Record<string, unknown> => (
@@ -37,6 +38,7 @@ const metadataCache = new LruTtlCache<string, NftMetadataResult>({
 });
 
 export const resolveNftMetadata = async (params: {
+  chain: SupportedChain;
   contract: string;
   tokenId: string;
   rpcUrlQuery: string | null;
@@ -53,11 +55,12 @@ export const resolveNftMetadata = async (params: {
   }
 
   const nowMs = Date.now();
-  const cacheKey = `${params.contract}:${tokenIdBn.toString()}`;
+  const cacheKey = `${params.chain}:${params.contract}:${tokenIdBn.toString()}`;
   const cached = metadataCache.get(cacheKey, nowMs);
   if (cached) return cached;
 
   const { metadataUri } = await resolveTokenMetadataUri({
+    chain: params.chain,
     contract: params.contract,
     tokenId: tokenIdBn,
     rpcUrlQuery: params.rpcUrlQuery,

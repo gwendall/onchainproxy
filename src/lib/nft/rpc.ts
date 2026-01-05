@@ -2,20 +2,23 @@ import { BigNumber, ethers } from "ethers";
 
 import { LruTtlCache } from "@/lib/cache/lru";
 import { resolveErc1155TemplateUri } from "@/lib/nft/erc1155";
+import type { SupportedChain } from "@/lib/nft/chain";
 
 const ERC721_ABI = ["function tokenURI(uint256 tokenId) view returns (string)"];
 const ERC1155_ABI = ["function uri(uint256 id) view returns (string)"];
 
-const defaultRpcUrls = [
-  "https://ethereum.publicnode.com",
-  // Some providers require API keys; keep defaults to keyless endpoints.
-  "https://rpc.flashbots.net",
-  "https://eth.llamarpc.com",
-  "https://1rpc.io/eth",
-  "https://cloudflare-eth.com",
-];
+const defaultRpcUrlsByChain: Record<SupportedChain, string[]> = {
+  eth: [
+    "https://ethereum.publicnode.com",
+    // Some providers require API keys; keep defaults to keyless endpoints.
+    "https://rpc.flashbots.net",
+    "https://eth.llamarpc.com",
+    "https://1rpc.io/eth",
+    "https://cloudflare-eth.com",
+  ],
+};
 
-const getRpcUrls = (rpcUrlQuery: string | null) => {
+const getRpcUrls = (rpcUrlQuery: string | null, chain: SupportedChain) => {
   const unique: string[] = [];
   const add = (url: string) => {
     if (!url) return;
@@ -29,7 +32,7 @@ const getRpcUrls = (rpcUrlQuery: string | null) => {
     for (const u of env.split(",").map((s) => s.trim()).filter((s) => s.length > 0)) add(u);
   }
 
-  for (const u of defaultRpcUrls) add(u);
+  for (const u of defaultRpcUrlsByChain[chain]) add(u);
   return unique;
 };
 
@@ -121,17 +124,18 @@ const shouldTryErc1155Fallback = (e: unknown) => {
 };
 
 export const resolveTokenMetadataUri = async (params: {
+  chain: SupportedChain;
   contract: string;
   tokenId: BigNumber;
   rpcUrlQuery: string | null;
   cacheTtlMs: number;
 }) => {
   const nowMs = Date.now();
-  const cacheKey = `${params.contract}:${params.tokenId.toString()}`;
+  const cacheKey = `${params.chain}:${params.contract}:${params.tokenId.toString()}`;
   const cached = tokenUriCache.get(cacheKey, nowMs);
   if (cached) return { metadataUri: cached, rpcUrl: "cache" };
 
-  const rpcUrls = getRpcUrls(params.rpcUrlQuery);
+  const rpcUrls = getRpcUrls(params.rpcUrlQuery, params.chain);
 
   const attempts: Array<{ url: string; error: string }> = [];
   let lastRpcError: unknown;

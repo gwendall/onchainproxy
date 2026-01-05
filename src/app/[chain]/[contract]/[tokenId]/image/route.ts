@@ -1,10 +1,11 @@
 import { ethers } from "ethers";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { normalizeChain } from "@/lib/nft/chain";
+import { decodeDataUrlToBuffer } from "@/lib/nft/dataUrl";
 import { computeWeakEtag, maybeNotModified } from "@/lib/nft/etag";
 import { clampInt, jsonError, sendSvgFallback, setCacheControl } from "@/lib/nft/http";
 import { fetchImageBuffer, maybeResizeToWebp } from "@/lib/nft/image";
-import { decodeDataUrlToBuffer } from "@/lib/nft/dataUrl";
 import { resolveNftMetadata } from "@/lib/nft/metadata";
 
 export const runtime = "nodejs";
@@ -79,17 +80,24 @@ const debugError = (e: unknown) => {
 
 export const GET = async (
   request: NextRequest,
-  ctx: { params: Promise<{ contract: string; tokenId: string }> },
+  ctx: { params: Promise<unknown> },
 ) => {
   try {
-    const { contract: rawContract, tokenId: rawTokenId } = await ctx.params;
+    const { chain: rawChain, contract: rawContract, tokenId: rawTokenId } = (await ctx.params) as {
+      chain: string;
+      contract: string;
+      tokenId: string;
+    };
+    const chain = normalizeChain(rawChain);
+    if (!chain) return sendSvgFallback(400, "Unsupported chain (use /eth/...)");
+
     const contract = decodeURIComponent(rawContract).trim();
     const tokenId = decodeURIComponent(rawTokenId).trim();
     if (!ethers.utils.isAddress(contract)) return sendSvgFallback(400, "Invalid contract");
 
     const search = request.nextUrl.searchParams;
     const rpcUrl = search.get("rpcUrl");
-    const raw = search.get("raw"); // "1" / "true" to return the original bytes (no transform)
+    const raw = search.get("raw"); // "1" to return the original bytes (no transform)
     const wantOriginal = raw === "1";
     // By default we rasterize SVGs to WebP for thumbnail friendliness.
     // Use raw=1 to get the original SVG, or svg=1 to force passthrough SVG without redirect.
@@ -105,6 +113,7 @@ export const GET = async (
     const quality = clampInt(search.get("q"), 30, 90, 70);
 
     const meta = await resolveNftMetadata({
+      chain,
       contract,
       tokenId,
       rpcUrlQuery: rpcUrl,

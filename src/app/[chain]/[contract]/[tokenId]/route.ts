@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import type { NextRequest } from "next/server";
 
+import { normalizeChain } from "@/lib/nft/chain";
 import { computeWeakEtag, maybeNotModified } from "@/lib/nft/etag";
 import { jsonError, setCacheControl } from "@/lib/nft/http";
 import { resolveNftMetadata } from "@/lib/nft/metadata";
@@ -33,10 +34,17 @@ const debugError = (e: unknown) => {
 
 export const GET = async (
   request: NextRequest,
-  ctx: { params: Promise<{ contract: string; tokenId: string }> },
+  ctx: { params: Promise<unknown> },
 ) => {
   try {
-    const { contract: rawContract, tokenId: rawTokenId } = await ctx.params;
+    const { chain: rawChain, contract: rawContract, tokenId: rawTokenId } = (await ctx.params) as {
+      chain: string;
+      contract: string;
+      tokenId: string;
+    };
+    const chain = normalizeChain(rawChain);
+    if (!chain) return jsonError(400, "Unsupported chain (use /eth/...)");
+
     const contract = decodeURIComponent(rawContract).trim();
     const tokenId = decodeURIComponent(rawTokenId).trim();
     if (!ethers.utils.isAddress(contract)) return jsonError(400, "Invalid contract");
@@ -46,6 +54,7 @@ export const GET = async (
     const lruTtlMs = 5 * 60 * 1000; // 5 min per instance
 
     const result = await resolveNftMetadata({
+      chain,
       contract,
       tokenId,
       rpcUrlQuery: rpcUrl,
