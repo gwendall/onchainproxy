@@ -1,6 +1,7 @@
 import { BigNumber, ethers } from "ethers";
 
 import { LruTtlCache } from "@/lib/cache/lru";
+import { decodeDataUrlToBuffer } from "@/lib/nft/dataUrl";
 import { resolveErc1155TemplateUri } from "@/lib/nft/erc1155";
 import { ipfsToHttp } from "@/lib/nft/ipfs";
 import { resolveTokenMetadataUri } from "@/lib/nft/rpc";
@@ -35,18 +36,6 @@ const metadataCache = new LruTtlCache<string, NftMetadataResult>({
   maxEntries: 2000,
 });
 
-const decodeDataUrl = (dataUrl: string) => {
-  const match = dataUrl.match(/^data:([^;,]+)?(;base64)?,(.*)$/);
-  if (!match) return null;
-  const mime = match[1] || "application/octet-stream";
-  const isBase64 = Boolean(match[2]);
-  const dataPart = match[3] || "";
-  const body = isBase64
-    ? Buffer.from(dataPart, "base64")
-    : Buffer.from(decodeURIComponent(dataPart), "utf8");
-  return { mime, body };
-};
-
 export const resolveNftMetadata = async (params: {
   contract: string;
   tokenId: string;
@@ -77,7 +66,7 @@ export const resolveNftMetadata = async (params: {
 
   // tokenURI may itself be an onchain data: URL
   if (metadataUri.startsWith("data:")) {
-    const decoded = decodeDataUrl(metadataUri);
+    const decoded = decodeDataUrlToBuffer(metadataUri);
     if (!decoded) throw new Error("Bad metadata data URL");
     const text = decoded.body.toString("utf8");
     const json = JSON.parse(text) as unknown;

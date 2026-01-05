@@ -1,6 +1,7 @@
 import { LruTtlCache } from "@/lib/cache/lru";
 import { getSharp } from "@/lib/image/sharp";
 import { computeWeakEtag } from "@/lib/nft/etag";
+export { decodeDataUrlToBuffer } from "@/lib/nft/dataUrl";
 
 type FetchImageResult = {
   contentType: string;
@@ -22,18 +23,6 @@ const fetchWithTimeout = async (url: string, timeoutMs: number) => {
   } finally {
     clearTimeout(t);
   }
-};
-
-export const decodeDataUrlToBuffer = (dataUrl: string) => {
-  const match = dataUrl.match(/^data:([^;,]+)?(;base64)?,(.*)$/);
-  if (!match) return null;
-  const mime = match[1] || "application/octet-stream";
-  const isBase64 = Boolean(match[2]);
-  const dataPart = match[3] || "";
-  const body = isBase64
-    ? Buffer.from(dataPart, "base64")
-    : Buffer.from(decodeURIComponent(dataPart), "utf8");
-  return { mime, body };
 };
 
 export const fetchImageBuffer = async (params: {
