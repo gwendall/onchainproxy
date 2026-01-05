@@ -32,6 +32,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-mono);
+  overflow-x: hidden;
   font-kerning: normal;
   font-optical-sizing: auto;
   font-synthesis: none;
@@ -39,6 +40,25 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Prevent long URLs / addresses from forcing horizontal scroll */
+html, body {
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+}
+
+main, p, li, code, pre {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Some browsers won't wrap very long inline anchors unless they can shrink */
+a {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* Base font-size for mobile (and anything < lg). */

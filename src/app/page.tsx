@@ -146,8 +146,8 @@ export default function Home() {
           </ul>
           <p className="mt-3 text-foreground-faint">
             For L2s, just swap <span className="text-foreground">/{chain}/</span> with e.g.{" "}
-            <span className="text-foreground">/arb/</span>, <span className="text-foreground">/op/</span>,{" "}
-            <span className="text-foreground">/base/</span>, <span className="text-foreground">/polygon/</span>, etc.
+            <span className="text-foreground">/base/</span>, <span className="text-foreground">/arb/</span>,{" "} 
+            <span className="text-foreground">/op/</span>,<span className="text-foreground">/polygon/</span>, etc.
           </p>
         </Section>
 
