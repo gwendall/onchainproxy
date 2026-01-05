@@ -3,8 +3,8 @@ import { SUPPORTED_CHAINS } from "@/lib/nft/chain";
 
 export default function Home() {
   const chain = "eth";
-  const meebitsContract = "0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7";
-  const meebitsTokenId = "14076";
+  const punksOriginalContract = "0xb47e3cd837ddf8e4c57f05d70ab865de6e193bbb";
+  const punkTokenId = "2113";
 
   const metadataParams = ["rpcUrl", "debug=1"] as const;
   const imageParams = ["raw=1", "svg=1", "w", "h", "q", "rpcUrl", "debug=1", "json=1"] as const;
@@ -125,22 +125,22 @@ export default function Home() {
           </p>
         </Section>
 
-        <Section title="Examples (Meebits)">
+        <Section title="Example (CryptoPunks)">
           <ul className="list-disc pl-5 space-y-1 text-foreground-muted">
             <li>
               <a
-                href={`/${chain}/${meebitsContract}/${meebitsTokenId}`}
+                href={`/${chain}/${punksOriginalContract}/${punkTokenId}`}
                 className="text-link hover:underline font-bold"
               >
-                /{chain}/{meebitsContract}/{meebitsTokenId}
+                /{chain}/{punksOriginalContract}/{punkTokenId}
               </a>
             </li>
             <li>
               <a
-                href={`/${chain}/${meebitsContract}/${meebitsTokenId}/image?w=512&h=512&q=70`}
+                href={`/${chain}/${punksOriginalContract}/${punkTokenId}/image?w=512&h=512&q=70`}
                 className="text-link hover:underline font-bold"
               >
-                /{chain}/{meebitsContract}/{meebitsTokenId}/image?w=512&h=512&q=70
+                /{chain}/{punksOriginalContract}/{punkTokenId}/image?w=512&h=512&q=70
               </a>
             </li>
           </ul>
