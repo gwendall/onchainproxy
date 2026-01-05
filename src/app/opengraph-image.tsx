@@ -33,10 +33,11 @@ export default async function Image() {
           {/* Logo abstrait: Carré blanc minimaliste */}
           <div
             style={{
-              width: "120px",
-              height: "120px",
+              width: "70px",
+              height: "70px",
               background: "white",
-              borderRadius: "12px",
+              borderRadius: "10px",
+              transform: "translateY(3px)",
             }}
           />
           {/* Titre */}
