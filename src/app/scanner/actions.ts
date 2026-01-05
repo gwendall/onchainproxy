@@ -4,21 +4,42 @@ import { Alchemy, Network, NftFilters } from "alchemy-sdk";
 import { resolveNftMetadata } from "@/lib/nft/metadata";
 import type { SupportedChain } from "@/lib/nft/chain";
 
+const alchemyNetworkForChain = (chain: SupportedChain): Network | null => {
+  switch (chain) {
+    case "eth":
+      return Network.ETH_MAINNET;
+    case "arb":
+      return Network.ARB_MAINNET;
+    case "op":
+      return Network.OPT_MAINNET;
+    case "base":
+      return Network.BASE_MAINNET;
+    case "polygon":
+      return Network.MATIC_MAINNET;
+    default:
+      return null;
+  }
+};
+
 // Helper to get Alchemy instance
-const getAlchemy = () => {
+const getAlchemy = (chain: SupportedChain) => {
+  const network = alchemyNetworkForChain(chain);
+  if (!network) {
+    throw new Error(`Wallet scanning is not supported on ${chain} yet.`);
+  }
   const apiKey = process.env.ALCHEMY_API_KEY;
   const config = {
     apiKey,
-    network: Network.ETH_MAINNET,
+    network,
   };
   return new Alchemy(config);
 };
 
 const isHexAddress = (s: string) => /^0x[a-fA-F0-9]{40}$/.test(String(s || "").trim());
 
-export async function scanNfts(addressOrEns: string) {
+export async function scanNfts(addressOrEns: string, chain: SupportedChain) {
   try {
-    const alchemy = getAlchemy();
+    const alchemy = getAlchemy(chain);
     const address = addressOrEns.trim();
 
     // ENS support disabled for now; only accept raw 0x addresses.
@@ -27,7 +48,7 @@ export async function scanNfts(addressOrEns: string) {
     }
 
     // Fetch NFTs (paginate: pageSize max is 100)
-    // ETH mainnet only for now (Alchemy network config above).
+    // Chain selected via Alchemy network config above.
     const ownedNfts: Array<{
       contract: { address: string };
       tokenId: string;

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Section } from "@/components/Section";
 import { scanNfts, checkNftStatus } from "./actions";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
+import { SUPPORTED_CHAINS, type SupportedChain } from "@/lib/nft/chain";
 
 type NftItem = {
   contract: string;
@@ -36,8 +37,26 @@ const normalizeImageUrl = (url: string | undefined) => {
 
 const isHexAddress = (s: string) => /^0x[a-fA-F0-9]{40}$/.test(String(s || "").trim());
 
+const openSeaChainSlug = (chain: string) => {
+  switch (chain) {
+    case "eth":
+      return "ethereum";
+    case "polygon":
+      return "matic";
+    case "arb":
+      return "arbitrum";
+    case "op":
+      return "optimism";
+    case "base":
+      return "base";
+    default:
+      return "ethereum";
+  }
+};
+
 type ScannerSession = {
   address: string;
+  chain: SupportedChain;
   savedAt: number;
   scanStartedAt?: number;
   scanEndedAt?: number;
@@ -45,8 +64,9 @@ type ScannerSession = {
   wasScanning: boolean;
 };
 
-const sessionKey = (address: string) => `onchainproxy:scanner:${address.toLowerCase()}`;
-const lastAddressKey = "onchainproxy:scanner:last";
+const sessionKey = (address: string, chain: SupportedChain) =>
+  `onchainproxy:scanner:${chain}:${address.toLowerCase()}`;
+const lastSessionKey = "onchainproxy:scanner:lastSession";
 
 const getNftKey = (n: Pick<NftItem, "chain" | "contract" | "tokenId">) =>
   `${n.chain}:${n.contract.toLowerCase()}:${n.tokenId}`;
@@ -61,7 +81,9 @@ const resetNftScan = (n: NftItem): NftItem => ({
 
 export default function ScannerPage() {
   const [input, setInput] = useState("");
+  const [selectedChain, setSelectedChain] = useState<SupportedChain>("eth");
   const [submittedAddress, setSubmittedAddress] = useState<string>("");
+  const [submittedChain, setSubmittedChain] = useState<SupportedChain>("eth");
   const [nfts, setNfts] = useState<NftItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -116,24 +138,46 @@ export default function ScannerPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const last = window.localStorage.getItem(lastAddressKey);
+      // New format (chain + address)
+      const lastRaw = window.localStorage.getItem(lastSessionKey);
+      let last: { address: string; chain: SupportedChain } | null = null;
+      if (lastRaw) {
+        try {
+          const parsed = JSON.parse(lastRaw) as { address?: string; chain?: SupportedChain };
+          if (parsed?.address && parsed?.chain) last = { address: parsed.address, chain: parsed.chain };
+        } catch {
+          // ignore
+        }
+      }
+
+      // Back-compat: older builds stored only the last address (assume eth).
+      if (!last) {
+        const legacy = window.localStorage.getItem("onchainproxy:scanner:last");
+        if (legacy) last = { address: legacy, chain: "eth" };
+      }
+
       if (!last) return;
-      const raw = window.localStorage.getItem(sessionKey(last));
+
+      const raw = window.localStorage.getItem(sessionKey(last.address, last.chain));
       if (!raw) return;
       const parsed = JSON.parse(raw) as ScannerSession;
-      if (!parsed?.address || !Array.isArray(parsed.nfts)) return;
+      if (!parsed?.address || !parsed?.chain || !Array.isArray(parsed.nfts)) return;
 
       // Any "scanning" item becomes "pending" on restore.
       const restoredNfts = parsed.nfts.map((n) => (n.status === "scanning" ? { ...n, status: "pending" as const } : n));
 
       setSubmittedAddress(parsed.address);
       setInput(parsed.address);
+      setSelectedChain(parsed.chain);
+      setSubmittedChain(parsed.chain);
       setNfts(restoredNfts);
       setScanStartedAt(typeof parsed.scanStartedAt === "number" ? parsed.scanStartedAt : null);
       setScanEndedAt(typeof parsed.scanEndedAt === "number" ? parsed.scanEndedAt : null);
 
-      if (parsed.wasScanning) {
-        // Resume automatically after refresh.
+      // Always resume automatically after refresh if there is anything left to scan.
+      // (Even if the previous session was paused/cancelled.)
+      const shouldResume = restoredNfts.some((n) => n.status === "pending" || n.status === "scanning");
+      if (shouldResume) {
         setTimeout(() => {
           void startScan({ auto: true });
         }, 0);
@@ -151,18 +195,19 @@ export default function ScannerPage() {
     try {
       const payload: ScannerSession = {
         address: submittedAddress,
+        chain: submittedChain,
         savedAt: Date.now(),
         scanStartedAt: scanStartedAt ?? undefined,
         scanEndedAt: scanEndedAt ?? undefined,
         nfts,
         wasScanning: isScanning,
       };
-      window.localStorage.setItem(sessionKey(submittedAddress), JSON.stringify(payload));
-      window.localStorage.setItem(lastAddressKey, submittedAddress);
+      window.localStorage.setItem(sessionKey(submittedAddress, submittedChain), JSON.stringify(payload));
+      window.localStorage.setItem(lastSessionKey, JSON.stringify({ address: submittedAddress, chain: submittedChain }));
     } catch {
       // ignore storage errors
     }
-  }, [submittedAddress, nfts, isScanning]);
+  }, [submittedAddress, submittedChain, nfts, isScanning, scanStartedAt, scanEndedAt]);
 
   const scanOne = async (idx: number, opts?: { force?: boolean; runId?: number }) => {
     const runId = opts?.runId ?? runIdRef.current;
@@ -278,7 +323,7 @@ export default function ScannerPage() {
     // If we already have a cached session for this address, reuse it and continue.
     if (typeof window !== "undefined") {
       try {
-        const raw = window.localStorage.getItem(sessionKey(nextSubmitted));
+        const raw = window.localStorage.getItem(sessionKey(nextSubmitted, selectedChain));
         if (raw) {
           const parsed = JSON.parse(raw) as ScannerSession;
           if (parsed?.address && Array.isArray(parsed.nfts) && parsed.nfts.length > 0) {
@@ -286,6 +331,7 @@ export default function ScannerPage() {
               n.status === "scanning" ? { ...n, status: "pending" as const } : n
             );
             setSubmittedAddress(nextSubmitted);
+            setSubmittedChain(parsed.chain ?? selectedChain);
             setNfts(restoredNfts);
             setScanStartedAt(typeof parsed.scanStartedAt === "number" ? parsed.scanStartedAt : Date.now());
             setScanEndedAt(typeof parsed.scanEndedAt === "number" ? parsed.scanEndedAt : null);
@@ -302,17 +348,18 @@ export default function ScannerPage() {
     setLoading(true);
     setNfts([]);
     setSubmittedAddress(nextSubmitted);
+    setSubmittedChain(selectedChain);
     setScanStartedAt(Date.now());
     setScanEndedAt(null);
 
     try {
       // Step 1: Fetch NFTs from Alchemy
-      const result = await scanNfts(nextSubmitted);
+      const result = await scanNfts(nextSubmitted, selectedChain);
       
       const items: NftItem[] = result.nfts.map((n: any) => ({
         contract: n.contract?.address,
         tokenId: n.tokenId,
-        chain: "eth", // Default to ETH for now, as we'll scan ETH mainnet
+        chain: selectedChain,
         title: n.title || `#${n.tokenId}`,
         collection: n.collection,
         thumbnailUrl: n.thumbnailUrl,
@@ -332,7 +379,9 @@ export default function ScannerPage() {
   };
 
   const inputTrimmed = input.trim();
-  const canSubmit = isHexAddress(inputTrimmed) && !(loading && nfts.length === 0);
+  const alchemyWalletChains: SupportedChain[] = ["eth", "arb", "op", "base", "polygon"];
+  const isChainSupportedForWallet = alchemyWalletChains.includes(selectedChain);
+  const canSubmit = isChainSupportedForWallet && isHexAddress(inputTrimmed) && !(loading && nfts.length === 0);
 
   // Auto-start scan when a new valid address is entered (debounced).
   useEffect(() => {
@@ -341,15 +390,16 @@ export default function ScannerPage() {
 
     const next = inputTrimmed;
     if (!isHexAddress(next)) return;
-    if (next.toLowerCase() === submittedAddress.toLowerCase()) return;
+    if (next.toLowerCase() === submittedAddress.toLowerCase() && selectedChain === submittedChain) return;
     if (loading || isScanning) return;
+    if (!isChainSupportedForWallet) return;
 
     autoScanTimerRef.current = window.setTimeout(() => {
       // Trigger the same flow as submit, but without requiring a button click.
       void (async () => {
         // If we already have a cached session for this address, reuse it and continue.
         try {
-          const raw = window.localStorage.getItem(sessionKey(next));
+          const raw = window.localStorage.getItem(sessionKey(next, selectedChain));
           if (raw) {
             const parsed = JSON.parse(raw) as ScannerSession;
             if (parsed?.address && Array.isArray(parsed.nfts) && parsed.nfts.length > 0) {
@@ -357,6 +407,7 @@ export default function ScannerPage() {
                 n.status === "scanning" ? { ...n, status: "pending" as const } : n
               );
               setSubmittedAddress(next);
+              setSubmittedChain(selectedChain);
               setNfts(restoredNfts);
               setLoading(false);
               setTimeout(() => void startScan(), 0);
@@ -370,13 +421,14 @@ export default function ScannerPage() {
         setLoading(true);
         setNfts([]);
         setSubmittedAddress(next);
+        setSubmittedChain(selectedChain);
 
         try {
-          const result = await scanNfts(next);
+          const result = await scanNfts(next, selectedChain);
           const items: NftItem[] = result.nfts.map((n: any) => ({
             contract: n.contract?.address,
             tokenId: n.tokenId,
-            chain: "eth",
+            chain: selectedChain,
             title: n.title || `#${n.tokenId}`,
             collection: n.collection,
             thumbnailUrl: n.thumbnailUrl,
@@ -396,7 +448,7 @@ export default function ScannerPage() {
     return () => {
       if (autoScanTimerRef.current) window.clearTimeout(autoScanTimerRef.current);
     };
-  }, [inputTrimmed, submittedAddress, loading, isScanning, scanStartedAt]);
+  }, [inputTrimmed, submittedAddress, loading, isScanning, scanStartedAt, selectedChain, isChainSupportedForWallet]);
 
   return (
     <main className="min-h-screen max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 font-mono text-sm">
@@ -414,6 +466,17 @@ export default function ScannerPage() {
 
         <Section title="Target">
           <form onSubmit={handleScan} className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <select
+              value={selectedChain}
+              onChange={(e) => setSelectedChain(e.target.value as SupportedChain)}
+              className="sm:w-40 px-0 py-2 bg-transparent border-b border-foreground-faint/30 rounded-none focus:border-foreground focus:outline-none"
+            >
+              {SUPPORTED_CHAINS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
             <input
               type="text"
               value={input}
@@ -432,6 +495,11 @@ export default function ScannerPage() {
               {loading && nfts.length === 0 ? "Fetching..." : "Scan"}
             </button>
           </form>
+          {!isChainSupportedForWallet ? (
+            <div className="mt-2 text-foreground-faint">
+              Wallet NFT listing is not supported on <span className="text-foreground">{selectedChain}</span> yet.
+            </div>
+          ) : null}
           {inputTrimmed.length > 0 && !isHexAddress(inputTrimmed) ? (
             <div className="mt-2 text-foreground-faint">
               Please enter a valid Ethereum address (0x + 40 hex chars).
@@ -569,7 +637,7 @@ export default function ScannerPage() {
                             #{nft.tokenId}
                           </span>
                           <a 
-                            href={`https://opensea.io/assets/ethereum/${nft.contract}/${nft.tokenId}`}
+                            href={`https://opensea.io/assets/${openSeaChainSlug(nft.chain)}/${nft.contract}/${nft.tokenId}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="shrink-0 inline-flex items-center gap-1 text-foreground-faint/70 hover:text-foreground hover:underline transition-colors"
