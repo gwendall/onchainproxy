@@ -8,7 +8,7 @@ Docs: `https://onchainproxy.io`
 
 ## Apps built with OnChainProxy
 
-- **OnChain Scanner** (`https://onchainproxy.io/scanner`): Scan a wallet’s NFTs and check which metadata/images are live vs down.
+- **OnChainScanner** (`https://onchainproxy.io/scanner`): Scan a wallet’s NFTs and check which metadata/images are live vs down.
 
 ## Deploy
 

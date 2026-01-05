@@ -12,7 +12,7 @@ export default function Home() {
 
   const appsBuiltWithOnchainProxy = [
     {
-      title: "OnChain Scanner",
+      title: "OnChainScanner",
       href: "/scanner",
       description: "Scan a wallet’s NFTs and check which metadata/images are live vs down.",
     },
