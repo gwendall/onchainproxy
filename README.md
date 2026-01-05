@@ -1,6 +1,6 @@
 # nft-proxy
 
-Developer-friendly endpoints to fetch **NFT metadata** and **images** without worrying about IPFS, CORS, remote domains, or flaky RPCs.
+Developer-friendly endpoints to fetch **Ethereum NFT metadata** and **images** without worrying about IPFS, CORS, remote domains, or flaky RPCs.
 
 It:
 - resolves `tokenURI()` / `uri()` (ERC-721 + ERC-1155)
@@ -15,7 +15,7 @@ It:
 
 ## How it works (high level)
 
-- Resolves `tokenURI()` (ERC-721) or `uri()` (ERC-1155) via JSON-RPC `eth_call` (tries multiple RPCs).
+- Resolves `tokenURI()` (ERC-721) or `uri()` (ERC-1155) on **Ethereum** via JSON-RPC `eth_call` (tries multiple RPCs).
 - Fetches and parses the token metadata JSON (supports `data:` and IPFS).
 - Extracts the best `image*` field, resolves IPFS, then either:
   - redirects to the original (`mode=original`)
