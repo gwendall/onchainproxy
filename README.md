@@ -108,7 +108,18 @@ Cache-friendly responses: `ETag` + `Cache-Control`.
 
 ## Config (env)
 
+- `ALCHEMY_API_KEY`: (optional helper) your Alchemy API key - if set, automatically generates RPC URLs for all supported chains (eth, arb, op, base, polygon, zksync, linea, scroll, polygon-zkevm). This is a convenience shortcut; you can always use the per-chain env vars instead.
 - `ONCHAIN_RPC_URLS` / `ONCHAIN_RPC_URL`: global RPC fallback (optional)
 - Per-chain: `ONCHAIN_RPC_URLS_ETH`, `ONCHAIN_RPC_URLS_BASE`, etc. (optional)
 - `IPFS_GATEWAY`: IPFS gateway base (default `https://ipfs.io/ipfs`)
 - `NEXT_PUBLIC_SITE_URL` / `SITE_URL`: base URL used in metadata (default `http://localhost:3000`)
+
+No env vars are required - the app works out of the box with public RPCs.
+
+### RPC priority order
+
+1. Query param `?rpcUrl=...` (highest priority)
+2. Chain-specific env: `ONCHAIN_RPC_URLS_ETH`, etc.
+3. Alchemy (if `ALCHEMY_API_KEY` is set)
+4. Global env: `ONCHAIN_RPC_URLS` / `ONCHAIN_RPC_URL`
+5. Default public RPCs (fallback)

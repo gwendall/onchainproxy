@@ -19,6 +19,27 @@ const PUNKS_DATA_ABI = [
   "function punkAttributes(uint16 index) view returns (string)",
 ];
 
+// Alchemy chain identifiers for automatic URL generation
+const alchemyChainIds: Partial<Record<SupportedChain, string>> = {
+  eth: "eth-mainnet",
+  arb: "arb-mainnet",
+  op: "opt-mainnet",
+  base: "base-mainnet",
+  polygon: "polygon-mainnet",
+  zksync: "zksync-mainnet",
+  linea: "linea-mainnet",
+  scroll: "scroll-mainnet",
+  "polygon-zkevm": "polygonzkevm-mainnet",
+};
+
+const getAlchemyUrl = (chain: SupportedChain): string | null => {
+  const apiKey = process.env.ALCHEMY_API_KEY;
+  if (!apiKey) return null;
+  const chainId = alchemyChainIds[chain];
+  if (!chainId) return null;
+  return `https://${chainId}.g.alchemy.com/v2/${apiKey}`;
+};
+
 const defaultRpcUrlsByChain: Record<SupportedChain, string[]> = {
   eth: [
     "https://ethereum.publicnode.com",
@@ -98,6 +119,12 @@ const getRpcUrls = (rpcUrlQuery: string | null, chain: SupportedChain) => {
     if (typeof env === "string" && env.length > 0) {
       for (const u of env.split(",").map((s) => s.trim()).filter((s) => s.length > 0)) add(u);
     }
+  }
+
+  // Alchemy API key: automatically generates URLs for all supported chains.
+  {
+    const alchemyUrl = getAlchemyUrl(chain);
+    if (alchemyUrl) add(alchemyUrl);
   }
 
   // Backwards-compatible/global env (applies to all chains when set).
