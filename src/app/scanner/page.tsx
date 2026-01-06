@@ -7,7 +7,7 @@ import { isAddress } from "viem";
 import { Drawer } from "vaul";
 import { Section } from "@/components/Section";
 import { scanNfts, checkNftStatus } from "./actions";
-import { ArrowLeft, ArrowUpRight, Database, Box, HardDrive, Server, HelpCircle, Pin, CheckCircle2, AlertCircle, RefreshCw, X, Check, AlertTriangle, Loader2, ImageOff, LayoutGrid, List } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Database, Box, HardDrive, Server, HelpCircle, Pin, CheckCircle2, AlertCircle, RefreshCw, X, Check, AlertTriangle, Loader2, ImageOff, LayoutGrid, List, Play, Square, RotateCcw } from "lucide-react";
 import { SUPPORTED_CHAINS, type SupportedChain } from "@/lib/nft/chain";
 
 type ErrorSource = "rpc" | "contract" | "metadata_fetch" | "parsing" | "image_fetch" | "unknown";
@@ -39,12 +39,30 @@ type NftItem = {
   // IPFS pin status
   metadataIpfsPinStatus?: IpfsPinStatus;
   imageIpfsPinStatus?: IpfsPinStatus;
+  // URIs
+  metadataUri?: string;
+  imageUri?: string;
 };
 
 const shortAddress = (addr: string) => {
   const a = String(addr || "");
   if (a.length <= 12) return a;
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
+};
+
+const shortUri = (uri: string, maxLength = 40) => {
+  const u = String(uri || "");
+  if (u.length <= maxLength) return u;
+  const half = Math.floor((maxLength - 1) / 2);
+  return `${u.slice(0, half)}…${u.slice(-half)}`;
+};
+
+const mainDomain = (domain: string) => {
+  const d = String(domain || "");
+  const parts = d.split(".");
+  if (parts.length < 2) return d;
+  // Return only the last 2 parts (e.g., "example.com")
+  return parts.slice(-2).join(".");
 };
 
 const normalizeImageUrl = (url: string | undefined) => {
@@ -544,6 +562,8 @@ export default function ScannerPage() {
           imageCentralizedDomain: status.imageCentralizedDomain,
           metadataIpfsPinStatus: status.metadataIpfsPinStatus,
           imageIpfsPinStatus: status.imageIpfsPinStatus,
+          metadataUri: status.metadataUri,
+          imageUri: status.imageUri,
         };
         return next;
       });
@@ -800,28 +820,39 @@ export default function ScannerPage() {
                 />
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-foreground-muted">
-                <div className="flex flex-wrap gap-x-6 gap-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {isScanning ? (
+                    <button 
+                      type="button" 
+                      onClick={cancelScan} 
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
+                    >
+                      <Square className="w-3.5 h-3.5" />
+                      Stop
+                    </button>
+                  ) : hasPending ? (
+                    <button 
+                      type="button" 
+                      onClick={continueScan} 
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors"
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                      Continue
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={rescanWallet}
-                    className="text-link hover:underline font-bold disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-foreground/10 text-foreground-muted hover:bg-foreground/15 hover:text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
                     disabled={isScanning || nfts.length === 0}
                   >
-                    Rescan wallet
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Rescan
                   </button>
-                  {isScanning ? (
-                    <button type="button" onClick={cancelScan} className="text-link hover:underline font-bold">
-                      Cancel scan
-                    </button>
-                  ) : hasPending ? (
-                    <button type="button" onClick={continueScan} className="text-link hover:underline font-bold">
-                      Continue scan
-                    </button>
-                  ) : null}
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 text-foreground-muted">
                   {isScanning && eta ? (
                     <div className="text-foreground-faint text-sm">
                       <span title={`${eta.speed} items/s`}>~{formatDuration(eta.remaining)} left</span>
@@ -841,136 +872,197 @@ export default function ScannerPage() {
 
         {nfts.length > 0 && (
           <div className="space-y-8 sm:space-y-10">
-            <Section title="Summary">
-              <div className="flex flex-wrap gap-x-8 gap-y-4 text-foreground-muted">
-                <div className="space-y-1">
-                   <div className="text-foreground-faint">Wallet</div>
-                   <div className="text-foreground font-bold truncate max-w-[260px]" title={submittedTarget || submittedAddress}>
-                    {submittedTarget && submittedTarget.toLowerCase() !== submittedAddress.toLowerCase()
-                      ? submittedTarget
-                      : shortAddress(submittedAddress)}
-                   </div>
-                   {submittedTarget && submittedTarget.toLowerCase() !== submittedAddress.toLowerCase() ? (
-                     <div className="text-foreground-faint truncate max-w-[260px]" title={submittedAddress}>
-                       {shortAddress(submittedAddress)}
-                     </div>
-                   ) : null}
-                </div>
-                <div className="space-y-1">
-                  <div className="text-foreground-faint">Broken Assets</div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-red-500 font-bold">{stats.brokenAssets}</span>
-                    <span className="text-foreground-faint">({stats.brokenAssetsPct}%)</span>
-                  </div>
-                </div>
-                {stats.transientErrors > 0 && (
-                  <div className="space-y-1">
-                    <div className="text-foreground-faint" title="Errors that may resolve on retry (RPC issues, timeouts)">Uncertain</div>
-                    <div className="text-yellow-600 font-bold">{stats.transientErrors}</div>
-                  </div>
-                )}
-                <div className="space-y-1">
-                  <div className="text-foreground-faint">Metadata</div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-green-500">{stats.metadataLive}</span>
-                    <span className="text-foreground-faint">/</span>
-                    <span className="text-red-500">{stats.metadataDown}</span>
-                    {stats.metadataUnknown > 0 && (
-                      <>
-                        <span className="text-foreground-faint">/</span>
-                        <span className="text-yellow-600" title="Transient errors">{stats.metadataUnknown}?</span>
-                      </>
+            {/* Wallet Health Report */}
+            <div className="rounded-xl border border-foreground-faint/20 overflow-hidden">
+              {/* Health Score Header */}
+              <div className={`p-5 ${
+                stats.scanned === 0 
+                  ? "bg-foreground-faint/5" 
+                  : stats.brokenAssetsPct === 0 
+                    ? "bg-green-500/10" 
+                    : stats.brokenAssetsPct < 10 
+                      ? "bg-yellow-500/10" 
+                      : stats.brokenAssetsPct < 30 
+                        ? "bg-orange-500/10" 
+                        : "bg-red-500/10"
+              }`}>
+                <div className="flex items-center justify-between gap-4 mb-3">
+                  <div>
+                    <div className="text-foreground-faint text-sm mb-1">Wallet</div>
+                    <div className="font-bold text-lg truncate max-w-[280px]" title={submittedTarget || submittedAddress}>
+                      {submittedTarget && submittedTarget.toLowerCase() !== submittedAddress.toLowerCase()
+                        ? submittedTarget
+                        : shortAddress(submittedAddress)}
+                    </div>
+                    {submittedTarget && submittedTarget.toLowerCase() !== submittedAddress.toLowerCase() && (
+                      <div className="text-foreground-faint text-sm truncate max-w-[280px]" title={submittedAddress}>
+                        {shortAddress(submittedAddress)}
+                      </div>
                     )}
                   </div>
+                  {stats.scanned > 0 && (
+                    <div className="text-right">
+                      <div className={`text-3xl font-bold ${
+                        stats.brokenAssetsPct === 0 
+                          ? "text-green-500" 
+                          : stats.brokenAssetsPct < 10 
+                            ? "text-yellow-500" 
+                            : stats.brokenAssetsPct < 30 
+                              ? "text-orange-500" 
+                              : "text-red-500"
+                      }`}>
+                        {100 - stats.brokenAssetsPct}%
+                      </div>
+                      <div className="text-foreground-faint text-sm">
+                        {stats.brokenAssetsPct === 0 
+                          ? "All assets healthy" 
+                          : stats.brokenAssetsPct < 10 
+                            ? "Good health" 
+                            : stats.brokenAssetsPct < 30 
+                              ? "Some issues" 
+                              : "Needs attention"}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="space-y-1">
-                   <div className="text-foreground-faint">Images</div>
-                   <div className="flex items-center gap-2">
-                    <span className="text-green-500">{stats.imageLive}</span>
-                    <span className="text-foreground-faint">/</span>
-                    <span className="text-red-500">{stats.imageDown}</span>
-                    {stats.imageUnknown > 0 && (
-                      <>
-                        <span className="text-foreground-faint">/</span>
-                        <span className="text-yellow-600" title="Transient errors">{stats.imageUnknown}?</span>
-                      </>
-                    )}
+                
+                {/* Quick Stats */}
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-foreground-faint">
+                      {stats.scanned}/{stats.total} scanned
+                      {stats.scanned < stats.total && (
+                        <span className="text-foreground-faint/60"> (in progress)</span>
+                      )}
+                    </span>
                   </div>
+                  {stats.brokenAssets > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-red-500" />
+                      <span className="text-red-500 font-medium">{stats.brokenAssets} broken</span>
+                    </div>
+                  )}
+                  {stats.transientErrors > 0 && (
+                    <div className="flex items-center gap-1.5" title="Temporary errors that may resolve on retry">
+                      <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                      <span className="text-yellow-500 font-medium">{stats.transientErrors} uncertain</span>
+                    </div>
+                  )}
                 </div>
               </div>
               
+              {/* Detailed Breakdown */}
               {stats.scanned > 0 && (
-                <div className="mt-6 pt-4 border-t border-foreground-faint/20">
-                  <div className="text-foreground-faint mb-3">Storage Breakdown</div>
-                  <div className="flex flex-wrap gap-x-8 gap-y-4 text-foreground-muted">
-                    <div className="space-y-1">
-                      <div className="text-foreground-faint text-sm">Metadata</div>
-                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
-                        {stats.metadataOnchain > 0 && (
-                          <span className="text-green-500" title="Fully on-chain metadata">
-                            {stats.metadataOnchain} on-chain
-                          </span>
+                <div className="p-5 bg-foreground/5 space-y-4">
+                  {/* Status Breakdown */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-foreground-faint text-xs uppercase tracking-wider mb-2">Metadata</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-green-500 font-bold">{stats.metadataLive}</span>
+                        <span className="text-foreground-faint text-sm">ok</span>
+                        {stats.metadataDown > 0 && (
+                          <>
+                            <span className="text-foreground-faint/30">•</span>
+                            <span className="text-red-500 font-bold">{stats.metadataDown}</span>
+                            <span className="text-foreground-faint text-sm">down</span>
+                          </>
                         )}
-                        {stats.metadataIpfs > 0 && (
-                          <span className="text-blue-500" title="Stored on IPFS">
-                            {stats.metadataIpfs} IPFS
-                            {(stats.metadataIpfsPinned > 0 || stats.metadataIpfsUnavailable > 0) && (
-                              <span className="text-foreground-faint ml-1">
-                                ({stats.metadataIpfsPinned > 0 && <span title="Pinned">📌{stats.metadataIpfsPinned}</span>}
-                                {stats.metadataIpfsAvailable > 0 && <span title="Available but may not be pinned" className="ml-1">✓{stats.metadataIpfsAvailable}</span>}
-                                {stats.metadataIpfsUnavailable > 0 && <span title="Unavailable - may be unpinned" className="text-red-500 ml-1">⚠{stats.metadataIpfsUnavailable}</span>})
-                              </span>
-                            )}
-                          </span>
-                        )}
-                        {stats.metadataArweave > 0 && (
-                          <span className="text-purple-500" title="Stored on Arweave">
-                            {stats.metadataArweave} Arweave
-                          </span>
-                        )}
-                        {stats.metadataCentralized > 0 && (
-                          <span className="text-yellow-600" title="Centralized server">
-                            {stats.metadataCentralized} centralized
-                          </span>
+                        {stats.metadataUnknown > 0 && (
+                          <>
+                            <span className="text-foreground-faint/30">•</span>
+                            <span className="text-yellow-500 font-bold">{stats.metadataUnknown}</span>
+                            <span className="text-foreground-faint text-sm">?</span>
+                          </>
                         )}
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <div className="text-foreground-faint text-sm">Images</div>
-                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
-                        {stats.imageOnchain > 0 && (
-                          <span className="text-green-500" title="Fully on-chain image">
-                            {stats.imageOnchain} on-chain
-                          </span>
+                    <div>
+                      <div className="text-foreground-faint text-xs uppercase tracking-wider mb-2">Images</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-green-500 font-bold">{stats.imageLive}</span>
+                        <span className="text-foreground-faint text-sm">ok</span>
+                        {stats.imageDown > 0 && (
+                          <>
+                            <span className="text-foreground-faint/30">•</span>
+                            <span className="text-red-500 font-bold">{stats.imageDown}</span>
+                            <span className="text-foreground-faint text-sm">down</span>
+                          </>
                         )}
-                        {stats.imageIpfs > 0 && (
-                          <span className="text-blue-500" title="Stored on IPFS">
-                            {stats.imageIpfs} IPFS
-                            {(stats.imageIpfsPinned > 0 || stats.imageIpfsUnavailable > 0) && (
-                              <span className="text-foreground-faint ml-1">
-                                ({stats.imageIpfsPinned > 0 && <span title="Pinned">📌{stats.imageIpfsPinned}</span>}
-                                {stats.imageIpfsAvailable > 0 && <span title="Available but may not be pinned" className="ml-1">✓{stats.imageIpfsAvailable}</span>}
-                                {stats.imageIpfsUnavailable > 0 && <span title="Unavailable - may be unpinned" className="text-red-500 ml-1">⚠{stats.imageIpfsUnavailable}</span>})
-                              </span>
-                            )}
-                          </span>
+                        {stats.imageUnknown > 0 && (
+                          <>
+                            <span className="text-foreground-faint/30">•</span>
+                            <span className="text-yellow-500 font-bold">{stats.imageUnknown}</span>
+                            <span className="text-foreground-faint text-sm">?</span>
+                          </>
                         )}
-                        {stats.imageArweave > 0 && (
-                          <span className="text-purple-500" title="Stored on Arweave">
-                            {stats.imageArweave} Arweave
-                          </span>
-                        )}
-                        {stats.imageCentralized > 0 && (
-                          <span className="text-yellow-600" title="Centralized server">
-                            {stats.imageCentralized} centralized
-                          </span>
-                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Storage Breakdown */}
+                  <div className="pt-3 border-t border-foreground-faint/10">
+                    <div className="text-foreground-faint text-xs uppercase tracking-wider mb-3">Storage</div>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="space-y-1.5">
+                        <div className="text-foreground-faint text-xs">Metadata</div>
+                        <div className="flex flex-wrap gap-x-2 gap-y-1">
+                          {stats.metadataOnchain > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 text-xs">
+                              <span className="font-medium">{stats.metadataOnchain}</span> on-chain
+                            </span>
+                          )}
+                          {stats.metadataIpfs > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 text-xs">
+                              <span className="font-medium">{stats.metadataIpfs}</span> IPFS
+                              {stats.metadataIpfsPinned > 0 && <span title="Pinned">📌</span>}
+                              {stats.metadataIpfsUnavailable > 0 && <span title="Unavailable" className="text-red-500">⚠</span>}
+                            </span>
+                          )}
+                          {stats.metadataArweave > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500 text-xs">
+                              <span className="font-medium">{stats.metadataArweave}</span> Arweave
+                            </span>
+                          )}
+                          {stats.metadataCentralized > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-600 text-xs">
+                              <span className="font-medium">{stats.metadataCentralized}</span> centralized
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="text-foreground-faint text-xs">Images</div>
+                        <div className="flex flex-wrap gap-x-2 gap-y-1">
+                          {stats.imageOnchain > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 text-xs">
+                              <span className="font-medium">{stats.imageOnchain}</span> on-chain
+                            </span>
+                          )}
+                          {stats.imageIpfs > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 text-xs">
+                              <span className="font-medium">{stats.imageIpfs}</span> IPFS
+                              {stats.imageIpfsPinned > 0 && <span title="Pinned">📌</span>}
+                              {stats.imageIpfsUnavailable > 0 && <span title="Unavailable" className="text-red-500">⚠</span>}
+                            </span>
+                          )}
+                          {stats.imageArweave > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500 text-xs">
+                              <span className="font-medium">{stats.imageArweave}</span> Arweave
+                            </span>
+                          )}
+                          {stats.imageCentralized > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-600 text-xs">
+                              <span className="font-medium">{stats.imageCentralized}</span> centralized
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               )}
-            </Section>
+            </div>
 
             <Section 
               title={`Results (${stats.scanned}/${nfts.length})`}
@@ -1296,7 +1388,7 @@ export default function ScannerPage() {
                               {storageLabel(selectedNft.metadataStorage)}
                             </span>
                             {selectedNft.metadataStorage === "centralized" && selectedNft.metadataCentralizedDomain && (
-                              <span className="text-foreground-muted">({selectedNft.metadataCentralizedDomain})</span>
+                              <span className="text-foreground-muted" title={selectedNft.metadataCentralizedDomain}>({mainDomain(selectedNft.metadataCentralizedDomain)})</span>
                             )}
                             {selectedNft.metadataStorage === "ipfs" && selectedNft.metadataIpfsPinStatus && (
                               <span className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${
@@ -1315,6 +1407,18 @@ export default function ScannerPage() {
                             {storageDescription(selectedNft.metadataStorage)}
                           </div>
                         </div>
+                      )}
+                      
+                      {selectedNft.metadataUri && (
+                        <a
+                          href={selectedNft.metadataUri}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block text-xs font-mono text-foreground-muted hover:text-foreground bg-foreground/5 hover:bg-foreground/10 px-2 py-1.5 rounded mb-2 truncate transition-colors"
+                          title={selectedNft.metadataUri}
+                        >
+                          {shortUri(selectedNft.metadataUri)}
+                        </a>
                       )}
                       
                       {selectedNft.error && selectedNft.metadataStatus !== "ok" && (
@@ -1374,7 +1478,7 @@ export default function ScannerPage() {
                               {storageLabel(selectedNft.imageStorage)}
                             </span>
                             {selectedNft.imageStorage === "centralized" && selectedNft.imageCentralizedDomain && (
-                              <span className="text-foreground-muted">({selectedNft.imageCentralizedDomain})</span>
+                              <span className="text-foreground-muted" title={selectedNft.imageCentralizedDomain}>({mainDomain(selectedNft.imageCentralizedDomain)})</span>
                             )}
                             {selectedNft.imageStorage === "ipfs" && selectedNft.imageIpfsPinStatus && (
                               <span className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${
@@ -1393,6 +1497,18 @@ export default function ScannerPage() {
                             {storageDescription(selectedNft.imageStorage)}
                           </div>
                         </div>
+                      )}
+                      
+                      {selectedNft.imageUri && (
+                        <a
+                          href={selectedNft.imageUri}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block text-xs font-mono text-foreground-muted hover:text-foreground bg-foreground/5 hover:bg-foreground/10 px-2 py-1.5 rounded mb-2 truncate transition-colors"
+                          title={selectedNft.imageUri}
+                        >
+                          {shortUri(selectedNft.imageUri)}
+                        </a>
                       )}
                       
                       {/* Image Details */}

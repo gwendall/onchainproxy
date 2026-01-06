@@ -286,6 +286,9 @@ export type NftStatusResult = {
   // IPFS pin status
   metadataIpfsPinStatus?: IpfsPinStatus;
   imageIpfsPinStatus?: IpfsPinStatus;
+  // URIs
+  metadataUri?: string;
+  imageUri?: string;
 };
 
 export type NftInfo = {
@@ -720,5 +723,7 @@ export async function checkNftStatus(chain: string, contract: string, tokenId: s
     imageSizeBytes: audit.image?.sizeBytes,
     metadataIpfsPinStatus: audit.metadata?.ipfsPinStatus,
     imageIpfsPinStatus: audit.image?.ipfsPinStatus,
+    metadataUri: audit.metadata?.url || audit.metadata?.uri,
+    imageUri: audit.image?.url || audit.image?.uri,
   };
 }

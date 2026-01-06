@@ -44,6 +44,13 @@ const shortAddress = (addr: string) => {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
 };
 
+const mainDomain = (domain: string) => {
+  const d = String(domain || "");
+  const parts = d.split(".");
+  if (parts.length < 2) return d;
+  return parts.slice(-2).join(".");
+};
+
 const openSeaChainSlug = (chain: string) => {
   switch (chain) {
     case "eth": return "ethereum";
@@ -532,10 +539,10 @@ export default function TokenScanPage({
                   {result.metadataStorage && (
                     <div className={`p-3 rounded ${storageBgColor(result.metadataStorage)}`}>
                       <div className="flex items-center gap-2">
-                        <span className={`font-bold flex items-center gap-1.5 ${storageColor(result.metadataStorage)}`}>
+                        <span className={`font-bold flex items-center gap-1.5 ${storageColor(result.metadataStorage)}`} title={result.metadataCentralizedDomain}>
                           <StorageIcon type={result.metadataStorage} />
                           {result.metadataStorage === "centralized" && result.metadataCentralizedDomain
-                            ? result.metadataCentralizedDomain
+                            ? mainDomain(result.metadataCentralizedDomain)
                             : storageLabel(result.metadataStorage)}
                         </span>
                         {result.metadataStorage === "ipfs" && result.metadataIpfsPinStatus && (
@@ -613,10 +620,10 @@ export default function TokenScanPage({
                   {result.imageStorage && (
                     <div className={`p-3 rounded ${storageBgColor(result.imageStorage)}`}>
                       <div className="flex items-center gap-2">
-                        <span className={`font-bold flex items-center gap-1.5 ${storageColor(result.imageStorage)}`}>
+                        <span className={`font-bold flex items-center gap-1.5 ${storageColor(result.imageStorage)}`} title={result.imageCentralizedDomain}>
                           <StorageIcon type={result.imageStorage} />
                           {result.imageStorage === "centralized" && result.imageCentralizedDomain
-                            ? result.imageCentralizedDomain
+                            ? mainDomain(result.imageCentralizedDomain)
                             : storageLabel(result.imageStorage)}
                         </span>
                         {result.imageStorage === "ipfs" && result.imageIpfsPinStatus && (
