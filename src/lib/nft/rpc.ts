@@ -5,6 +5,11 @@ import { resolveErc1155TemplateUri } from "@/lib/nft/erc1155";
 import { CRYPTOPUNKS_DATA_CONTRACT, isCryptoPunksContract } from "@/lib/nft/punks";
 import type { SupportedChain } from "@/lib/nft/chain";
 
+// ENS Base Registrar Implementation contract (for .eth domains)
+const ENS_BASE_REGISTRAR = "0x57f1887a8bf19b14fc0df6fd9b2acc9af147ea85";
+const isEnsBaseRegistrar = (contract: string) =>
+  contract.toLowerCase() === ENS_BASE_REGISTRAR.toLowerCase();
+
 const ERC721_ABI = ["function tokenURI(uint256 tokenId) view returns (string)"];
 const ERC1155_ABI = ["function uri(uint256 id) view returns (string)"];
 
@@ -310,6 +315,14 @@ export const resolveTokenMetadataUri = async (params: {
     const metadataUri = `data:application/json;utf8,${encodeURIComponent(JSON.stringify(metadata))}`;
     tokenUriCache.set(cacheKey, metadataUri, params.cacheTtlMs, nowMs);
     return { metadataUri, rpcUrl };
+  }
+
+  // ENS Base Registrar special-case (uses ENS metadata service)
+  if (params.chain === "eth" && isEnsBaseRegistrar(params.contract)) {
+    // ENS metadata service expects the token ID as-is (it's the labelhash)
+    const metadataUri = `https://metadata.ens.domains/mainnet/${ENS_BASE_REGISTRAR}/${params.tokenId.toString()}`;
+    tokenUriCache.set(cacheKey, metadataUri, params.cacheTtlMs, nowMs);
+    return { metadataUri, rpcUrl: "ens-metadata-service" };
   }
 
   const rpcUrls = getRpcUrls(params.rpcUrlQuery, params.chain);
