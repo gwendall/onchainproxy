@@ -14,10 +14,24 @@ const isRecord = (v: unknown): v is Record<string, unknown> => (
 
 const pickImageField = (metadata: unknown): string | undefined => {
   if (!isRecord(metadata)) return undefined;
-  const keys = ["image", "image_url", "imageUrl", "imageURI", "imageUri"] as const;
-  for (const key of keys) {
+  // First check for standard URL-based image fields
+  const urlKeys = ["image", "image_url", "imageUrl", "imageURI", "imageUri"] as const;
+  for (const key of urlKeys) {
     const val = metadata[key];
     if (typeof val === "string" && val.length > 0) return val;
+  }
+  // Check for inline image data (e.g. Pak's "merge" NFTs use image_data with raw SVG)
+  const imageData = metadata["image_data"];
+  if (typeof imageData === "string" && imageData.length > 0) {
+    // If it's already a data URL, return as-is
+    if (imageData.startsWith("data:")) return imageData;
+    // If it looks like SVG, wrap in a data URL
+    const trimmed = imageData.trimStart();
+    if (trimmed.startsWith("<svg") || trimmed.startsWith("<?xml")) {
+      return `data:image/svg+xml;base64,${Buffer.from(imageData).toString("base64")}`;
+    }
+    // For other inline data, assume it's already encoded or return as-is
+    return imageData;
   }
   return undefined;
 };
