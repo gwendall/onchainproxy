@@ -3,14 +3,14 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "OnChainScanner",
   description:
-    "Scan an Ethereum wallet’s NFTs and check whether token metadata and images are live or down.",
+    "Scan an Ethereum wallet's onchain assets and check whether token metadata and images are live or down.",
   alternates: {
     canonical: "/scanner",
   },
   openGraph: {
     title: "OnChainScanner",
     description:
-      "Scan an Ethereum wallet’s NFTs and check whether token metadata and images are live or down.",
+      "Scan an Ethereum wallet's onchain assets and check whether token metadata and images are live or down.",
     url: "/scanner",
     type: "website",
     images: [
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "OnChainScanner",
     description:
-      "Scan an Ethereum wallet’s NFTs and check whether token metadata and images are live or down.",
+      "Scan an Ethereum wallet's onchain assets and check whether token metadata and images are live or down.",
     images: [
       {
         url: "/scanner/twitter-image",
