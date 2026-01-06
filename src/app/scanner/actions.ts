@@ -195,7 +195,7 @@ export async function scanNfts(addressOrEns: string, chain: SupportedChain): Pro
     };
   } catch (e: unknown) {
     console.error("Scan error details:", e);
-    const message = e instanceof Error ? e.message : "Failed to scan NFTs";
+    const message = e instanceof Error ? e.message : "Failed to scan assets";
     return {
       nfts: [],
       resolvedAddress,

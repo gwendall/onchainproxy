@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: LayoutProps): Promise<Metadat
   const { chain, contract, tokenId } = await params;
   const chainName = chainDisplayName(chain);
   const title = `Token #${tokenId} Health Check | ${chainName}`;
-  const description = `Check if NFT ${shortAddress(contract)} #${tokenId} on ${chainName} has accessible metadata and images.`;
+  const description = `Check if asset ${shortAddress(contract)} #${tokenId} on ${chainName} has accessible metadata and images.`;
   
   return {
     title,

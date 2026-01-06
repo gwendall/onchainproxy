@@ -14,7 +14,7 @@ export default function Home() {
     {
       title: "OnChainScanner",
       href: "/scanner",
-      description: "Scan a wallet’s NFTs and check which metadata/images are live vs down.",
+      description: "Scan a wallet's onchain assets and check which metadata/images are live vs down.",
     },
   ] as const;
 

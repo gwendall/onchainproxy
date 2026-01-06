@@ -1113,43 +1113,47 @@ export default function ScannerPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <div className="text-foreground-faint text-xs uppercase tracking-wider mb-2">Metadata</div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-green-500 font-bold">{stats.metadataLive}</span>
-                        <span className="text-foreground-faint text-sm">ok</span>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="whitespace-nowrap">
+                          <span className="text-green-500 font-bold">{stats.metadataLive}</span>
+                          <span className="text-foreground-faint text-sm ml-1">ok</span>
+                        </span>
                         {stats.metadataDown > 0 && (
-                          <>
+                          <span className="whitespace-nowrap">
                             <span className="text-foreground-faint/30">•</span>
-                            <span className="text-red-500 font-bold">{stats.metadataDown}</span>
-                            <span className="text-foreground-faint text-sm">broken</span>
-                          </>
+                            <span className="text-red-500 font-bold ml-1">{stats.metadataDown}</span>
+                            <span className="text-foreground-faint text-sm ml-1">broken</span>
+                          </span>
                         )}
                         {stats.metadataUnknown > 0 && (
-                          <>
+                          <span className="whitespace-nowrap">
                             <span className="text-foreground-faint/30">•</span>
-                            <span className="text-yellow-500 font-bold">{stats.metadataUnknown}</span>
-                            <span className="text-foreground-faint text-sm">uncertain</span>
-                          </>
+                            <span className="text-yellow-500 font-bold ml-1">{stats.metadataUnknown}</span>
+                            <span className="text-foreground-faint text-sm ml-1">uncertain</span>
+                          </span>
                         )}
                       </div>
                     </div>
                     <div>
                       <div className="text-foreground-faint text-xs uppercase tracking-wider mb-2">Images</div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-green-500 font-bold">{stats.imageLive}</span>
-                        <span className="text-foreground-faint text-sm">ok</span>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="whitespace-nowrap">
+                          <span className="text-green-500 font-bold">{stats.imageLive}</span>
+                          <span className="text-foreground-faint text-sm ml-1">ok</span>
+                        </span>
                         {stats.imageDown > 0 && (
-                          <>
+                          <span className="whitespace-nowrap">
                             <span className="text-foreground-faint/30">•</span>
-                            <span className="text-red-500 font-bold">{stats.imageDown}</span>
-                            <span className="text-foreground-faint text-sm">broken</span>
-                          </>
+                            <span className="text-red-500 font-bold ml-1">{stats.imageDown}</span>
+                            <span className="text-foreground-faint text-sm ml-1">broken</span>
+                          </span>
                         )}
                         {stats.imageUnknown > 0 && (
-                          <>
+                          <span className="whitespace-nowrap">
                             <span className="text-foreground-faint/30">•</span>
-                            <span className="text-yellow-500 font-bold">{stats.imageUnknown}</span>
-                            <span className="text-foreground-faint text-sm">uncertain</span>
-                          </>
+                            <span className="text-yellow-500 font-bold ml-1">{stats.imageUnknown}</span>
+                            <span className="text-foreground-faint text-sm ml-1">uncertain</span>
+                          </span>
                         )}
                       </div>
                     </div>
@@ -1805,43 +1809,47 @@ export default function ScannerPage() {
           <div className="grid grid-cols-2 gap-4 mb-6">
             <div className="p-4 rounded-lg bg-white/5">
               <div className="text-gray-400 text-sm mb-2">Metadata</div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-green-500 font-bold">{stats.metadataLive}</span>
-                <span className="text-gray-500">ok</span>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="whitespace-nowrap">
+                  <span className="text-green-500 font-bold">{stats.metadataLive}</span>
+                  <span className="text-gray-500 ml-1">ok</span>
+                </span>
                 {stats.metadataDown > 0 && (
-                  <>
+                  <span className="whitespace-nowrap">
                     <span className="text-gray-600">•</span>
-                    <span className="text-red-500 font-bold">{stats.metadataDown}</span>
-                    <span className="text-gray-500">broken</span>
-                  </>
+                    <span className="text-red-500 font-bold ml-1">{stats.metadataDown}</span>
+                    <span className="text-gray-500 ml-1">broken</span>
+                  </span>
                 )}
                 {stats.metadataUnknown > 0 && (
-                  <>
+                  <span className="whitespace-nowrap">
                     <span className="text-gray-600">•</span>
-                    <span className="text-yellow-500 font-bold">{stats.metadataUnknown}</span>
-                    <span className="text-gray-500">uncertain</span>
-                  </>
+                    <span className="text-yellow-500 font-bold ml-1">{stats.metadataUnknown}</span>
+                    <span className="text-gray-500 ml-1">uncertain</span>
+                  </span>
                 )}
               </div>
             </div>
             <div className="p-4 rounded-lg bg-white/5">
               <div className="text-gray-400 text-sm mb-2">Images</div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-green-500 font-bold">{stats.imageLive}</span>
-                <span className="text-gray-500">ok</span>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="whitespace-nowrap">
+                  <span className="text-green-500 font-bold">{stats.imageLive}</span>
+                  <span className="text-gray-500 ml-1">ok</span>
+                </span>
                 {stats.imageDown > 0 && (
-                  <>
+                  <span className="whitespace-nowrap">
                     <span className="text-gray-600">•</span>
-                    <span className="text-red-500 font-bold">{stats.imageDown}</span>
-                    <span className="text-gray-500">broken</span>
-                  </>
+                    <span className="text-red-500 font-bold ml-1">{stats.imageDown}</span>
+                    <span className="text-gray-500 ml-1">broken</span>
+                  </span>
                 )}
                 {stats.imageUnknown > 0 && (
-                  <>
+                  <span className="whitespace-nowrap">
                     <span className="text-gray-600">•</span>
-                    <span className="text-yellow-500 font-bold">{stats.imageUnknown}</span>
-                    <span className="text-gray-500">uncertain</span>
-                  </>
+                    <span className="text-yellow-500 font-bold ml-1">{stats.imageUnknown}</span>
+                    <span className="text-gray-500 ml-1">uncertain</span>
+                  </span>
                 )}
               </div>
             </div>

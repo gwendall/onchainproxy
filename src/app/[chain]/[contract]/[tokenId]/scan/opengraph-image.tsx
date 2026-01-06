@@ -226,7 +226,7 @@ export default async function Image({
                 fontWeight: 700,
               }}
             >
-              NFT
+              Asset
             </div>
           )}
         </div>
