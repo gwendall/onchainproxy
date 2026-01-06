@@ -281,6 +281,8 @@ export type NftStatusResult = {
   imageStorage?: StorageType;
   imageFormat?: ImageFormat;
   imageSizeBytes?: number;
+  metadataCentralizedDomain?: string;
+  imageCentralizedDomain?: string;
   // IPFS pin status
   metadataIpfsPinStatus?: IpfsPinStatus;
   imageIpfsPinStatus?: IpfsPinStatus;
@@ -377,6 +379,16 @@ const isFromPinningService = (uri: string | undefined): boolean => {
   if (!uri) return false;
   const u = uri.toLowerCase();
   return KNOWN_PINNING_SERVICES.some((service) => u.includes(service));
+};
+
+const extractDomain = (uri: string | undefined): string | null => {
+  if (!uri) return null;
+  try {
+    const url = new URL(uri);
+    return url.hostname;
+  } catch {
+    return null;
+  }
 };
 
 const checkIpfsAvailability = async (cid: string): Promise<{ available: boolean; gatewaysUp: number }> => {
@@ -494,6 +506,7 @@ export type NftAuditResult = {
     ipfsCid?: string;
     ipfsPinStatus?: IpfsPinStatus;
     ipfsGatewaysUp?: number;
+    centralizedDomain?: string;
     raw?: unknown;
   };
   
@@ -507,6 +520,7 @@ export type NftAuditResult = {
     ipfsCid?: string;
     ipfsPinStatus?: IpfsPinStatus;
     ipfsGatewaysUp?: number;
+    centralizedDomain?: string;
     format?: ImageFormat;
     contentType?: string;
     sizeBytes?: number;
@@ -541,6 +555,7 @@ export async function auditNft(chain: string, contract: string, tokenId: string)
   let metadataIpfsCid: string | undefined;
   let metadataIpfsPinStatus: IpfsPinStatus | undefined;
   let metadataIpfsGatewaysUp: number | undefined;
+  let metadataCentralizedDomain: string | undefined;
   
   if (metadataStorageType === "ipfs") {
     metadataIpfsCid = extractIpfsCid(metadataResult.metadataUri) || undefined;
@@ -553,6 +568,8 @@ export async function auditNft(chain: string, contract: string, tokenId: string)
       metadataIpfsGatewaysUp = gatewaysUp;
       metadataIpfsPinStatus = available ? "available" : "unavailable";
     }
+  } else if (metadataStorageType === "centralized") {
+    metadataCentralizedDomain = extractDomain(metadataResult.metadataUrl || metadataResult.metadataUri) || undefined;
   }
   
   // Analyze image
@@ -566,6 +583,7 @@ export async function auditNft(chain: string, contract: string, tokenId: string)
     let imageIpfsCid: string | undefined;
     let imageIpfsPinStatus: IpfsPinStatus | undefined;
     let imageIpfsGatewaysUp: number | undefined;
+    let imageCentralizedDomain: string | undefined;
     
     if (imageStorageType === "ipfs" && !isImageOnchain) {
       imageIpfsCid = extractIpfsCid(metadataResult.imageUri || metadataResult.imageUrl) || undefined;
@@ -578,6 +596,8 @@ export async function auditNft(chain: string, contract: string, tokenId: string)
         imageIpfsGatewaysUp = gatewaysUp;
         imageIpfsPinStatus = available ? "available" : "unavailable";
       }
+    } else if (imageStorageType === "centralized") {
+      imageCentralizedDomain = extractDomain(metadataResult.imageUrl || metadataResult.imageUri) || undefined;
     }
     
     imageAnalysis = {
@@ -589,6 +609,7 @@ export async function auditNft(chain: string, contract: string, tokenId: string)
       ipfsCid: imageIpfsCid,
       ipfsPinStatus: imageIpfsPinStatus,
       ipfsGatewaysUp: imageIpfsGatewaysUp,
+      centralizedDomain: imageCentralizedDomain,
     };
     
     // If on-chain, try to detect format from data URL
@@ -661,6 +682,7 @@ export async function auditNft(chain: string, contract: string, tokenId: string)
       ipfsCid: metadataIpfsCid,
       ipfsPinStatus: metadataIpfsPinStatus,
       ipfsGatewaysUp: metadataIpfsGatewaysUp,
+      centralizedDomain: metadataCentralizedDomain,
       raw: metadataResult.metadata,
     },
     image: imageAnalysis,

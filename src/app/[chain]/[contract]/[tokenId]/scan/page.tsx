@@ -28,10 +28,12 @@ type ScanResult = {
   metadataUrl?: string;
   metadataStorage?: StorageType;
   metadataIpfsPinStatus?: IpfsPinStatus;
+  metadataCentralizedDomain?: string;
   imageUri?: string;
   imageUrl?: string;
   imageStorage?: StorageType;
   imageIpfsPinStatus?: IpfsPinStatus;
+  imageCentralizedDomain?: string;
   imageFormat?: ImageFormat;
   imageSizeBytes?: number;
 };
@@ -223,10 +225,12 @@ export default function TokenScanPage({
         metadataUrl: audit.metadata?.url,
         metadataStorage: audit.metadata?.storageType,
         metadataIpfsPinStatus: audit.metadata?.ipfsPinStatus,
+        metadataCentralizedDomain: audit.metadata?.centralizedDomain,
         imageUri: audit.image?.uri,
         imageUrl: audit.image?.url,
         imageStorage: audit.image?.storageType,
         imageIpfsPinStatus: audit.image?.ipfsPinStatus,
+        imageCentralizedDomain: audit.image?.centralizedDomain,
         imageFormat: audit.image?.format,
         imageSizeBytes: audit.image?.sizeBytes,
       });
@@ -530,7 +534,9 @@ export default function TokenScanPage({
                       <div className="flex items-center gap-2">
                         <span className={`font-bold flex items-center gap-1.5 ${storageColor(result.metadataStorage)}`}>
                           <StorageIcon type={result.metadataStorage} />
-                          {storageLabel(result.metadataStorage)}
+                          {result.metadataStorage === "centralized" && result.metadataCentralizedDomain
+                            ? result.metadataCentralizedDomain
+                            : storageLabel(result.metadataStorage)}
                         </span>
                         {result.metadataStorage === "ipfs" && result.metadataIpfsPinStatus && (
                           <span className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
@@ -609,7 +615,9 @@ export default function TokenScanPage({
                       <div className="flex items-center gap-2">
                         <span className={`font-bold flex items-center gap-1.5 ${storageColor(result.imageStorage)}`}>
                           <StorageIcon type={result.imageStorage} />
-                          {storageLabel(result.imageStorage)}
+                          {result.imageStorage === "centralized" && result.imageCentralizedDomain
+                            ? result.imageCentralizedDomain
+                            : storageLabel(result.imageStorage)}
                         </span>
                         {result.imageStorage === "ipfs" && result.imageIpfsPinStatus && (
                           <span className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${

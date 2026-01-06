@@ -33,6 +33,8 @@ type NftItem = {
   imageStorage?: StorageType;
   imageFormat?: ImageFormat;
   imageSizeBytes?: number;
+  metadataCentralizedDomain?: string;
+  imageCentralizedDomain?: string;
   // IPFS pin status
   metadataIpfsPinStatus?: IpfsPinStatus;
   imageIpfsPinStatus?: IpfsPinStatus;
@@ -390,6 +392,8 @@ export default function ScannerPage() {
           imageStorage: status.imageStorage,
           imageFormat: status.imageFormat,
           imageSizeBytes: status.imageSizeBytes,
+          metadataCentralizedDomain: status.metadataCentralizedDomain,
+          imageCentralizedDomain: status.imageCentralizedDomain,
           metadataIpfsPinStatus: status.metadataIpfsPinStatus,
           imageIpfsPinStatus: status.imageIpfsPinStatus,
         };
@@ -945,7 +949,11 @@ export default function ScannerPage() {
                                   "bg-yellow-500/10 border-yellow-500/20 text-yellow-600"
                                 }`}>
                                   <StorageIcon type={nft.metadataStorage} />
-                                  <span className="uppercase text-[10px] font-bold">{nft.metadataStorage}</span>
+                                  <span className="uppercase text-[10px] font-bold">
+                                    {nft.metadataStorage === "centralized" && nft.metadataCentralizedDomain 
+                                      ? nft.metadataCentralizedDomain 
+                                      : nft.metadataStorage}
+                                  </span>
                                   {nft.metadataStorage === "ipfs" && nft.metadataIpfsPinStatus && (
                                     <span title={ipfsPinTooltip(nft.metadataIpfsPinStatus)} className={
                                       nft.metadataIpfsPinStatus === "pinned" ? "text-green-600" :
@@ -973,7 +981,11 @@ export default function ScannerPage() {
                                   "bg-yellow-500/10 border-yellow-500/20 text-yellow-600"
                                 }`}>
                                   <StorageIcon type={nft.imageStorage} />
-                                  <span className="uppercase text-[10px] font-bold">{nft.imageStorage}</span>
+                                  <span className="uppercase text-[10px] font-bold">
+                                    {nft.imageStorage === "centralized" && nft.imageCentralizedDomain 
+                                      ? nft.imageCentralizedDomain 
+                                      : nft.imageStorage}
+                                  </span>
                                   {nft.imageStorage === "ipfs" && nft.imageIpfsPinStatus && (
                                     <span title={ipfsPinTooltip(nft.imageIpfsPinStatus)} className={
                                       nft.imageIpfsPinStatus === "pinned" ? "text-green-600" :
