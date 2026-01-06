@@ -164,9 +164,9 @@ const storageDescription = (type: StorageType | undefined): string => {
 
 const ipfsPinLabel = (status: IpfsPinStatus | undefined): string => {
   switch (status) {
-    case "pinned": return "Pinned";
+    case "pinned": return "Pinned ✓";
     case "available": return "Available";
-    case "unavailable": return "Unavailable";
+    case "unavailable": return "Not pinned ⚠";
     default: return "";
   }
 };
@@ -568,7 +568,7 @@ export default function TokenScanPage({
                               ? "bg-green-500/20 text-green-500"
                               : result.metadataIpfsPinStatus === "available"
                               ? "bg-blue-500/20 text-blue-500"
-                              : "bg-red-500/20 text-red-500"
+                              : "bg-orange-500/20 text-orange-500"
                           }`}>
                             <IpfsPinIcon status={result.metadataIpfsPinStatus} className="w-3 h-3" />
                             {ipfsPinLabel(result.metadataIpfsPinStatus)}
@@ -658,7 +658,7 @@ export default function TokenScanPage({
                               ? "bg-green-500/20 text-green-500"
                               : result.imageIpfsPinStatus === "available"
                               ? "bg-blue-500/20 text-blue-500"
-                              : "bg-red-500/20 text-red-500"
+                              : "bg-orange-500/20 text-orange-500"
                           }`}>
                             <IpfsPinIcon status={result.imageIpfsPinStatus} className="w-3 h-3" />
                             {ipfsPinLabel(result.imageIpfsPinStatus)}

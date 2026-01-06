@@ -7,8 +7,10 @@ import { isAddress } from "viem";
 import { Drawer } from "vaul";
 import { Section } from "@/components/Section";
 import { scanNfts, checkNftStatus } from "./actions";
-import { ArrowLeft, ArrowUpRight, Database, Box, HardDrive, Server, HelpCircle, Pin, CheckCircle2, AlertCircle, RefreshCw, X, Check, AlertTriangle, Loader2, ImageOff, LayoutGrid, List, Play, Square, RotateCcw } from "lucide-react";
-import { SUPPORTED_CHAINS, type SupportedChain } from "@/lib/nft/chain";
+import { ArrowLeft, ArrowUpRight, Database, Box, HardDrive, Server, HelpCircle, Pin, CheckCircle2, AlertCircle, RefreshCw, X, Check, AlertTriangle, Loader2, ImageOff, LayoutGrid, List, Play, Square, RotateCcw, Share2 } from "lucide-react";
+import { toPng } from "html-to-image";
+import QRCode from "qrcode";
+import { SUPPORTED_CHAINS, chainLabel, type SupportedChain } from "@/lib/nft/chain";
 
 type ErrorSource = "rpc" | "contract" | "metadata_fetch" | "parsing" | "image_fetch" | "unknown";
 type StorageType = "onchain" | "ipfs" | "arweave" | "centralized" | "unknown";
@@ -208,9 +210,9 @@ const storageDescription = (type: StorageType | undefined): string => {
 
 const ipfsPinLabel = (status: IpfsPinStatus | undefined): string => {
   switch (status) {
-    case "pinned": return "Pinned";
+    case "pinned": return "Pinned ✓";
     case "available": return "Available";
-    case "unavailable": return "Unavailable";
+    case "unavailable": return "Not pinned ⚠";
     default: return "";
   }
 };
@@ -309,9 +311,14 @@ export default function ScannerPage() {
   const cancelRef = useRef(false);
   const runIdRef = useRef(0);
   const needsAutoScanRef = useRef(false);
+  const [urlParamScan, setUrlParamScan] = useState<{ target: string; chain: SupportedChain } | null>(null);
   const nftsRef = useRef(nfts);
   const didRestoreRef = useRef(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const shareCardRef = useRef<HTMLDivElement>(null);
+  const [isGeneratingShare, setIsGeneratingShare] = useState(false);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
+  const [validBrokenAssetKeys, setValidBrokenAssetKeys] = useState<Set<string>>(new Set());
   const [selectedNftIdx, setSelectedNftIdx] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showErrorsOnly, setShowErrorsOnly] = useState(false);
@@ -340,6 +347,19 @@ export default function ScannerPage() {
     window.localStorage.setItem("onchainproxy:scanner:viewMode", viewMode);
   }, [viewMode]);
   
+  // Generate QR code for share card (includes wallet address/ENS as query param)
+  useEffect(() => {
+    const baseUrl = "https://onchainproxy.io/scanner";
+    const qrUrl = submittedTarget 
+      ? `${baseUrl}?w=${encodeURIComponent(submittedTarget)}`
+      : baseUrl;
+    QRCode.toDataURL(qrUrl, {
+      width: 64,
+      margin: 1,
+      color: { dark: "#000000", light: "#ffffff" },
+    }).then(setQrCodeDataUrl).catch(() => {});
+  }, [submittedTarget]);
+  
   // Keep ref in sync with state - update synchronously in the setter
   // The useEffect is kept as a fallback for external state changes
   useEffect(() => {
@@ -364,13 +384,25 @@ export default function ScannerPage() {
     return () => clearInterval(interval);
   }, [isScanning]);
 
-  // Restore session from localStorage after hydration (runs once)
+  // Check URL query params and restore session from localStorage after hydration (runs once)
   useEffect(() => {
     if (didRestoreRef.current) return;
     didRestoreRef.current = true;
     
     // Schedule outside synchronous effect to satisfy lint rule
     requestAnimationFrame(() => {
+      // First check for URL query param
+      const urlParams = new URLSearchParams(window.location.search);
+      const walletParam = urlParams.get("w");
+      
+      if (walletParam && isValidTarget(walletParam)) {
+        // Valid wallet in URL - set input and mark for auto-scan
+        setInput(walletParam);
+        setUrlParamScan({ target: walletParam, chain: selectedChain });
+        return;
+      }
+      
+      // No valid URL param, try to restore from localStorage
       try {
         const lastRaw = window.localStorage.getItem(lastSessionKey);
         if (!lastRaw) return;
@@ -403,7 +435,7 @@ export default function ScannerPage() {
         // Ignore restore errors
       }
     });
-  }, []);
+  }, [selectedChain]);
 
   const stats = useMemo(() => {
     const total = nfts.length;
@@ -656,6 +688,77 @@ export default function ScannerPage() {
     setScanEndedAt(null);
   }, [submittedAddress, nfts.length, cancelScan]);
 
+  // Share/download report as image
+  const shareReport = useCallback(async () => {
+    if (!shareCardRef.current || isGeneratingShare) return;
+    
+    setIsGeneratingShare(true);
+    try {
+      // Pre-check which broken asset images can actually load
+      const brokenAssets = nfts.filter(
+        (n) => (n.imageStatus === "error" || n.metadataStatus === "error")
+      );
+      
+      const validKeys = new Set<string>();
+      await Promise.all(
+        brokenAssets.slice(0, 10).map(async (nft) => {
+          const key = `${nft.contract}-${nft.tokenId}`;
+          const url = `/${submittedChain}/${nft.contract}/${nft.tokenId}/image?w=128&h=128`;
+          try {
+            const res = await fetch(url, { method: "HEAD" });
+            if (res.ok) {
+              validKeys.add(key);
+            }
+          } catch {
+            // Image failed to load, don't add to valid set
+          }
+        })
+      );
+      setValidBrokenAssetKeys(validKeys);
+      
+      // Wait a tick for state to update and re-render
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      
+      // Generate the image (images use same-origin proxy endpoint, no CORS issues)
+      const dataUrl = await toPng(shareCardRef.current, {
+        quality: 1,
+        pixelRatio: 2,
+        backgroundColor: "#0a0a0a",
+      });
+      
+      // Convert to blob
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], "onchain-scanner-report.png", { type: "image/png" });
+      
+      // Try native share first
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          title: "OnChain Scanner Report",
+          text: `Check out my wallet's onchain asset health report!`,
+          url: "https://onchainproxy.io/scanner",
+          files: [file],
+        });
+      } else {
+        // Fallback: download the image
+        const link = document.createElement("a");
+        link.href = dataUrl;
+        link.download = "onchain-scanner-report.png";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (error) {
+      // User cancelled share - this is normal behavior
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
+      console.error("Share failed:", error instanceof Error ? error.message : error);
+    } finally {
+      setIsGeneratingShare(false);
+    }
+  }, [isGeneratingShare, nfts, submittedChain]);
+
   // Auto-start scan when NFTs are loaded and needsAutoScanRef is set
   useEffect(() => {
     if (needsAutoScanRef.current && !isScanning && nftsRef.current.length > 0 && submittedAddress) {
@@ -738,6 +841,18 @@ export default function ScannerPage() {
     setLoading(false);
   }, []);
 
+  // Auto-scan from URL param (runs after component mounts and fetchAndScan is available)
+  useEffect(() => {
+    if (urlParamScan && !loading && !isScanning) {
+      const { target, chain } = urlParamScan;
+      setUrlParamScan(null);
+      // Try to restore session first, otherwise start fresh scan
+      if (!restoreSession(target, chain)) {
+        void fetchAndScan(target, chain);
+      }
+    }
+  }, [urlParamScan, loading, isScanning, restoreSession, fetchAndScan]);
+
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValidTarget(input)) return;
@@ -780,13 +895,13 @@ export default function ScannerPage() {
               >
                 {SUPPORTED_CHAINS.map((c) => (
                   <option key={c} value={c}>
-                    {c}
+                    {chainLabel(c)}
                   </option>
                 ))}
               </select>
               {/* Hidden text to set width based on selected value */}
               <span className="col-start-1 row-start-1 invisible pl-4 pr-8 py-2.5 whitespace-nowrap" aria-hidden="true">
-                {selectedChain}
+                {chainLabel(selectedChain)}
               </span>
               {/* Dropdown arrow */}
               <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -908,7 +1023,7 @@ export default function ScannerPage() {
               }`}>
                 <div className="flex items-center justify-between gap-4 mb-3">
                   <div>
-                    <div className="text-foreground-faint text-sm mb-1">Wallet</div>
+                    <div className="text-foreground-faint text-sm mb-1">Wallet on {chainLabel(submittedChain)}</div>
                     <div className="font-bold text-lg truncate max-w-[280px]" title={submittedTarget || submittedAddress}>
                       {submittedTarget && submittedTarget.toLowerCase() !== submittedAddress.toLowerCase()
                         ? submittedTarget
@@ -968,6 +1083,14 @@ export default function ScannerPage() {
                       <span className="text-yellow-500 font-medium">{stats.transientErrors} uncertain</span>
                     </div>
                   )}
+                  {(stats.metadataIpfsUnavailable > 0 || stats.imageIpfsUnavailable > 0) && (
+                    <div className="flex items-center gap-1.5" title="IPFS assets that may no longer be pinned">
+                      <span className="w-2 h-2 rounded-full bg-orange-500" />
+                      <span className="text-orange-500 font-medium">
+                        {stats.metadataIpfsUnavailable + stats.imageIpfsUnavailable} unpinned IPFS
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -985,14 +1108,14 @@ export default function ScannerPage() {
                           <>
                             <span className="text-foreground-faint/30">•</span>
                             <span className="text-red-500 font-bold">{stats.metadataDown}</span>
-                            <span className="text-foreground-faint text-sm">down</span>
+                            <span className="text-foreground-faint text-sm">broken</span>
                           </>
                         )}
                         {stats.metadataUnknown > 0 && (
                           <>
                             <span className="text-foreground-faint/30">•</span>
                             <span className="text-yellow-500 font-bold">{stats.metadataUnknown}</span>
-                            <span className="text-foreground-faint text-sm">?</span>
+                            <span className="text-foreground-faint text-sm">uncertain</span>
                           </>
                         )}
                       </div>
@@ -1006,80 +1129,95 @@ export default function ScannerPage() {
                           <>
                             <span className="text-foreground-faint/30">•</span>
                             <span className="text-red-500 font-bold">{stats.imageDown}</span>
-                            <span className="text-foreground-faint text-sm">down</span>
+                            <span className="text-foreground-faint text-sm">broken</span>
                           </>
                         )}
                         {stats.imageUnknown > 0 && (
                           <>
                             <span className="text-foreground-faint/30">•</span>
                             <span className="text-yellow-500 font-bold">{stats.imageUnknown}</span>
-                            <span className="text-foreground-faint text-sm">?</span>
+                            <span className="text-foreground-faint text-sm">uncertain</span>
                           </>
                         )}
                       </div>
                     </div>
                   </div>
                   
-                  {/* Storage Breakdown */}
+                  {/* Storage Distribution */}
                   <div className="pt-3 border-t border-foreground-faint/10">
                     <div className="text-foreground-faint text-xs uppercase tracking-wider mb-3">Storage</div>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div className="space-y-1.5">
-                        <div className="text-foreground-faint text-xs">Metadata</div>
-                        <div className="flex flex-wrap gap-x-2 gap-y-1">
-                          {stats.metadataOnchain > 0 && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 text-xs">
-                              <span className="font-medium">{stats.metadataOnchain}</span> on-chain
-                            </span>
-                          )}
-                          {stats.metadataIpfs > 0 && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 text-xs">
-                              <span className="font-medium">{stats.metadataIpfs}</span> IPFS
-                              {stats.metadataIpfsPinned > 0 && <span title="Pinned">📌</span>}
-                              {stats.metadataIpfsUnavailable > 0 && <span title="Unavailable" className="text-red-500">⚠</span>}
-                            </span>
-                          )}
-                          {stats.metadataArweave > 0 && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500 text-xs">
-                              <span className="font-medium">{stats.metadataArweave}</span> Arweave
-                            </span>
-                          )}
-                          {stats.metadataCentralized > 0 && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-600 text-xs">
-                              <span className="font-medium">{stats.metadataCentralized}</span> centralized
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <div className="text-foreground-faint text-xs">Images</div>
-                        <div className="flex flex-wrap gap-x-2 gap-y-1">
-                          {stats.imageOnchain > 0 && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 text-xs">
-                              <span className="font-medium">{stats.imageOnchain}</span> on-chain
-                            </span>
-                          )}
-                          {stats.imageIpfs > 0 && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 text-xs">
-                              <span className="font-medium">{stats.imageIpfs}</span> IPFS
-                              {stats.imageIpfsPinned > 0 && <span title="Pinned">📌</span>}
-                              {stats.imageIpfsUnavailable > 0 && <span title="Unavailable" className="text-red-500">⚠</span>}
-                            </span>
-                          )}
-                          {stats.imageArweave > 0 && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500 text-xs">
-                              <span className="font-medium">{stats.imageArweave}</span> Arweave
-                            </span>
-                          )}
-                          {stats.imageCentralized > 0 && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-600 text-xs">
-                              <span className="font-medium">{stats.imageCentralized}</span> centralized
-                            </span>
-                          )}
+                    <div className="flex flex-wrap gap-2">
+                      {stats.metadataOnchain + stats.imageOnchain > 0 && (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-green-500/10 text-green-500 text-sm">
+                          <Database className="w-3.5 h-3.5" />
+                          {stats.metadataOnchain + stats.imageOnchain} on-chain
+                        </span>
+                      )}
+                      {stats.metadataIpfs + stats.imageIpfs > 0 && (
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-sm ${
+                          stats.metadataIpfsUnavailable + stats.imageIpfsUnavailable > 0
+                            ? "bg-orange-500/10 text-orange-500"
+                            : "bg-blue-500/10 text-blue-500"
+                        }`}>
+                          <Box className="w-3.5 h-3.5" />
+                          {stats.metadataIpfs + stats.imageIpfs} IPFS
+                        </span>
+                      )}
+                      {stats.metadataArweave + stats.imageArweave > 0 && (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-purple-500/10 text-purple-500 text-sm">
+                          <HardDrive className="w-3.5 h-3.5" />
+                          {stats.metadataArweave + stats.imageArweave} Arweave
+                        </span>
+                      )}
+                      {stats.metadataCentralized + stats.imageCentralized > 0 && (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-yellow-500/10 text-yellow-600 text-sm">
+                          <Server className="w-3.5 h-3.5" />
+                          {stats.metadataCentralized + stats.imageCentralized} centralized
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* IPFS Warning */}
+                  {(stats.metadataIpfsUnavailable > 0 || stats.imageIpfsUnavailable > 0) && (
+                    <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <div className="text-orange-500 font-medium text-sm">
+                            {stats.metadataIpfsUnavailable + stats.imageIpfsUnavailable} IPFS assets may be unpinned
+                          </div>
+                          <div className="text-orange-500/70 text-xs mt-0.5">
+                            These assets are not on a pinning service and could become unavailable if no one is hosting them.
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
+                  
+                  {/* Share Button */}
+                  {stats.scanned === stats.total && stats.total > 0 && (
+                    <div className="pt-4 border-t border-foreground-faint/10">
+                      <button
+                        type="button"
+                        onClick={shareReport}
+                        disabled={isGeneratingShare}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg bg-foreground text-background hover:bg-foreground/90 transition-colors disabled:opacity-50"
+                      >
+                        {isGeneratingShare ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="w-4 h-4" />
+                            Share Report
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1425,7 +1563,7 @@ export default function ScannerPage() {
                                   ? "bg-green-500/20 text-green-500"
                                   : selectedNft.metadataIpfsPinStatus === "available"
                                   ? "bg-blue-500/20 text-blue-500"
-                                  : "bg-red-500/20 text-red-500"
+                                  : "bg-orange-500/20 text-orange-500"
                               }`}>
                                 <IpfsPinIcon status={selectedNft.metadataIpfsPinStatus} className="w-2.5 h-2.5" />
                                 {ipfsPinLabel(selectedNft.metadataIpfsPinStatus)}
@@ -1524,7 +1662,7 @@ export default function ScannerPage() {
                                   ? "bg-green-500/20 text-green-500"
                                   : selectedNft.imageIpfsPinStatus === "available"
                                   ? "bg-blue-500/20 text-blue-500"
-                                  : "bg-red-500/20 text-red-500"
+                                  : "bg-orange-500/20 text-orange-500"
                               }`}>
                                 <IpfsPinIcon status={selectedNft.imageIpfsPinStatus} className="w-2.5 h-2.5" />
                                 {ipfsPinLabel(selectedNft.imageIpfsPinStatus)}
@@ -1600,6 +1738,218 @@ export default function ScannerPage() {
           </Drawer.Content>
         </Drawer.Portal>
       </Drawer.Root>
+      
+      {/* Hidden Share Card for Image Generation */}
+      <div className="fixed -left-[9999px] -top-[9999px]">
+        <div
+          ref={shareCardRef}
+          className="w-[600px] p-8 bg-[#0a0a0a] text-white"
+          style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="text-2xl font-bold">Wallet Health Report</div>
+            <div className={`text-4xl font-bold ${
+              stats.brokenAssetsPct === 0 
+                ? "text-green-500" 
+                : stats.brokenAssetsPct < 10 
+                  ? "text-yellow-500" 
+                  : stats.brokenAssetsPct < 30 
+                    ? "text-orange-500" 
+                    : "text-red-500"
+            }`}>
+              {stats.scanned > 0 ? `${100 - stats.brokenAssetsPct}%` : "—"}
+            </div>
+          </div>
+          
+          {/* Wallet Address */}
+          <div className="mb-6 p-4 rounded-lg bg-white/5">
+            <div className="text-gray-400 text-sm mb-1">Wallet on {chainLabel(submittedChain)}</div>
+            <div className="text-xl font-bold truncate">
+              {submittedTarget && submittedTarget.toLowerCase() !== submittedAddress.toLowerCase()
+                ? submittedTarget
+                : shortAddress(submittedAddress)}
+            </div>
+            {submittedTarget && submittedTarget.toLowerCase() !== submittedAddress.toLowerCase() && (
+              <div className="text-gray-500 text-sm">{shortAddress(submittedAddress)}</div>
+            )}
+          </div>
+          
+          {/* Stats Grid */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="p-4 rounded-lg bg-white/5">
+              <div className="text-gray-400 text-sm mb-2">Assets Scanned</div>
+              <div className="text-2xl font-bold">{stats.scanned}</div>
+            </div>
+            <div className="p-4 rounded-lg bg-white/5">
+              <div className="text-gray-400 text-sm mb-2">Issues Found</div>
+              <div className={`text-2xl font-bold ${stats.brokenAssets > 0 ? "text-red-500" : "text-green-500"}`}>
+                {stats.brokenAssets}
+              </div>
+            </div>
+          </div>
+          
+          {/* Health Breakdown */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="p-4 rounded-lg bg-white/5">
+              <div className="text-gray-400 text-sm mb-2">Metadata</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-green-500 font-bold">{stats.metadataLive}</span>
+                <span className="text-gray-500">ok</span>
+                {stats.metadataDown > 0 && (
+                  <>
+                    <span className="text-gray-600">•</span>
+                    <span className="text-red-500 font-bold">{stats.metadataDown}</span>
+                    <span className="text-gray-500">broken</span>
+                  </>
+                )}
+                {stats.metadataUnknown > 0 && (
+                  <>
+                    <span className="text-gray-600">•</span>
+                    <span className="text-yellow-500 font-bold">{stats.metadataUnknown}</span>
+                    <span className="text-gray-500">uncertain</span>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="p-4 rounded-lg bg-white/5">
+              <div className="text-gray-400 text-sm mb-2">Images</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-green-500 font-bold">{stats.imageLive}</span>
+                <span className="text-gray-500">ok</span>
+                {stats.imageDown > 0 && (
+                  <>
+                    <span className="text-gray-600">•</span>
+                    <span className="text-red-500 font-bold">{stats.imageDown}</span>
+                    <span className="text-gray-500">broken</span>
+                  </>
+                )}
+                {stats.imageUnknown > 0 && (
+                  <>
+                    <span className="text-gray-600">•</span>
+                    <span className="text-yellow-500 font-bold">{stats.imageUnknown}</span>
+                    <span className="text-gray-500">uncertain</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          {/* Storage Distribution */}
+          <div className="p-4 rounded-lg bg-white/5 mb-4">
+            <div className="text-gray-400 text-sm mb-3">Storage Distribution</div>
+            <div className="flex flex-wrap gap-2">
+              {stats.metadataOnchain + stats.imageOnchain > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-green-500/10 text-green-500 text-sm">
+                  <Database className="w-3.5 h-3.5" />
+                  {stats.metadataOnchain + stats.imageOnchain} on-chain
+                </span>
+              )}
+              {stats.metadataIpfs + stats.imageIpfs > 0 && (
+                <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-sm ${
+                  stats.metadataIpfsUnavailable + stats.imageIpfsUnavailable > 0
+                    ? "bg-orange-500/10 text-orange-500"
+                    : "bg-blue-500/10 text-blue-500"
+                }`}>
+                  <Box className="w-3.5 h-3.5" />
+                  {stats.metadataIpfs + stats.imageIpfs} IPFS
+                </span>
+              )}
+              {stats.metadataArweave + stats.imageArweave > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-purple-500/10 text-purple-500 text-sm">
+                  <HardDrive className="w-3.5 h-3.5" />
+                  {stats.metadataArweave + stats.imageArweave} Arweave
+                </span>
+              )}
+              {stats.metadataCentralized + stats.imageCentralized > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-yellow-500/10 text-yellow-600 text-sm">
+                  <Server className="w-3.5 h-3.5" />
+                  {stats.metadataCentralized + stats.imageCentralized} centralized
+                </span>
+              )}
+            </div>
+          </div>
+          
+          {/* IPFS Warning */}
+          {(stats.metadataIpfsUnavailable + stats.imageIpfsUnavailable > 0) && (
+            <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/30 mb-4">
+              <div className="flex items-center gap-2 text-orange-400">
+                <span className="text-lg">⚠️</span>
+                <div>
+                  <div className="font-medium">
+                    {stats.metadataIpfsUnavailable + stats.imageIpfsUnavailable} IPFS assets may be unpinned
+                  </div>
+                  <div className="text-orange-400/70 text-sm">These assets could become unavailable</div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Broken Assets Gallery - only show images that passed validation */}
+          {(() => {
+            const allBroken = nfts.filter(
+              (n) => (n.imageStatus === "error" || n.metadataStatus === "error")
+            );
+            // Filter to only show validated images
+            const validBroken = allBroken.filter(
+              (n) => validBrokenAssetKeys.has(`${n.contract}-${n.tokenId}`)
+            );
+            const maxShow = 5;
+            const shown = validBroken.slice(0, maxShow);
+            // Count remaining as all broken minus shown (not just validated ones)
+            const totalBroken = allBroken.length;
+            const remaining = totalBroken - shown.length;
+            
+            // Don't show section if no validated images
+            if (shown.length === 0) return null;
+            
+            return (
+              <div className="mb-8">
+                <div className="text-gray-400 text-sm mb-3">Broken Assets</div>
+                <div className="flex gap-2">
+                  {shown.map((nft, i) => (
+                    <div
+                      key={`${nft.contract}-${nft.tokenId}-${i}`}
+                      className="w-14 h-14 rounded-lg overflow-hidden bg-white/5 border border-white/10 shrink-0"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/${submittedChain}/${nft.contract}/${nft.tokenId}/image?w=128&h=128`}
+                        alt=""
+                        className="w-full h-full object-cover opacity-70 scale-110"
+                      />
+                    </div>
+                  ))}
+                  {remaining > 0 && (
+                    <div className="w-14 h-14 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                      <span className="text-gray-400 text-xs font-medium">+{remaining}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+          
+          {/* Footer / CTA */}
+          <div className="flex items-center justify-between pt-6 border-t border-white/10">
+            <div>
+              <div className="text-lg font-bold text-white">OnChain Scanner</div>
+              <div className="text-gray-400 text-sm">onchainproxy.io/scanner</div>
+            </div>
+            {qrCodeDataUrl && (
+              <div className="w-12 h-12 shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={qrCodeDataUrl} alt="QR Code" className="w-full h-full" />
+              </div>
+            )}
+          </div>
+          
+          {/* Disclaimer */}
+          <div className="text-gray-600 text-[10px] text-center mt-4">
+            Availability snapshot only. Results may be incomplete or inaccurate. Not a value or quality assessment.
+          </div>
+        </div>
+      </div>
     </main>
   );
 }

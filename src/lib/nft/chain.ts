@@ -23,6 +23,21 @@ export const SUPPORTED_CHAINS: SupportedChain[] = [
 
 export const supportedChainsHint = () => SUPPORTED_CHAINS.map((c) => `/${c}/...`).join(", ");
 
+export const chainLabel = (chain: SupportedChain): string => {
+  switch (chain) {
+    case "eth": return "Ethereum";
+    case "arb": return "Arbitrum";
+    case "op": return "Optimism";
+    case "base": return "Base";
+    case "polygon": return "Polygon";
+    case "zksync": return "zkSync Era";
+    case "linea": return "Linea";
+    case "scroll": return "Scroll";
+    case "polygon-zkevm": return "Polygon zkEVM";
+    default: return chain;
+  }
+};
+
 export const normalizeChain = (raw: string): SupportedChain | null => {
   const c = decodeURIComponent(raw).trim().toLowerCase();
   if (c === "eth" || c === "ethereum" || c === "mainnet") return "eth";

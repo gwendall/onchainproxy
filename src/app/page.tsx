@@ -32,6 +32,23 @@ export default function Home() {
           <p className="text-foreground-muted">Built for the EVM. Supports Ethereum and major EVM L2s.</p>
         </header>
 
+        <Section title="Built with OnChainProxy">
+          <div className="space-y-4 text-foreground-muted">
+            {appsBuiltWithOnchainProxy.map((app) => (
+              <div key={app.href} className="space-y-2">
+                <a
+                  href={app.href}
+                  className="inline-flex items-center gap-2 leading-none text-link hover:underline font-bold"
+                >
+                  <Square className="w-4 h-4 shrink-0 text-foreground-faint" />
+                  <span className="leading-none">{app.title}</span>
+                </a>
+                <p className="text-foreground-faint">{app.description}</p>
+              </div>
+            ))}
+          </div>
+        </Section>
+
         <Section title="Deploy">
           <div className="space-y-3 text-foreground-muted">
             <p className="text-foreground-faint">
@@ -286,44 +303,6 @@ export default function Home() {
           </ul>
         </Section>
 
-        <Section title="Apps built with OnChainProxy">
-          <div className="space-y-4 text-foreground-muted">
-            {appsBuiltWithOnchainProxy.map((app) => (
-              <div key={app.href} className="space-y-2">
-                <a
-                  href={app.href}
-                  className="inline-flex items-center gap-2 leading-none text-link hover:underline font-bold"
-                >
-                  <Square className="w-4 h-4 shrink-0 text-foreground-faint" />
-                  <span className="leading-none">{app.title}</span>
-                </a>
-                <p className="text-foreground-faint">{app.description}</p>
-              </div>
-            ))}
-          </div>
-        </Section>
-
-        <footer className="text-foreground-muted">
-          Made by{" "}
-          <a
-            href="https://gwendall.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-link hover:underline font-bold"
-          >
-            Gwendall
-          </a>
-          .{" "}
-          <a
-            href={repoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-link hover:underline font-bold"
-          >
-            Open source
-          </a>{" "}
-          <span className="text-foreground-faint">(MIT License)</span>.
-        </footer>
       </div>
     </main>
   );
