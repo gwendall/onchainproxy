@@ -29,11 +29,15 @@ type ScanResult = {
   metadataStorage?: StorageType;
   metadataIpfsPinStatus?: IpfsPinStatus;
   metadataCentralizedDomain?: string;
+  metadataResponseTimeMs?: number;
+  metadataIsSlow?: boolean;
   imageUri?: string;
   imageUrl?: string;
   imageStorage?: StorageType;
   imageIpfsPinStatus?: IpfsPinStatus;
   imageCentralizedDomain?: string;
+  imageResponseTimeMs?: number;
+  imageIsSlow?: boolean;
   imageFormat?: ImageFormat;
   imageSizeBytes?: number;
 };
@@ -233,11 +237,15 @@ export default function TokenScanPage({
         metadataStorage: audit.metadata?.storageType,
         metadataIpfsPinStatus: audit.metadata?.ipfsPinStatus,
         metadataCentralizedDomain: audit.metadata?.centralizedDomain,
+        metadataResponseTimeMs: audit.metadata?.responseTime?.responseTimeMs,
+        metadataIsSlow: audit.metadata?.responseTime?.isSlow,
         imageUri: audit.image?.uri,
         imageUrl: audit.image?.url,
         imageStorage: audit.image?.storageType,
         imageIpfsPinStatus: audit.image?.ipfsPinStatus,
         imageCentralizedDomain: audit.image?.centralizedDomain,
+        imageResponseTimeMs: audit.image?.responseTime?.responseTimeMs,
+        imageIsSlow: audit.image?.responseTime?.isSlow,
         imageFormat: audit.image?.format,
         imageSizeBytes: audit.image?.sizeBytes,
       });
@@ -545,6 +553,15 @@ export default function TokenScanPage({
                             ? mainDomain(result.metadataCentralizedDomain)
                             : storageLabel(result.metadataStorage)}
                         </span>
+                        {result.metadataStorage === "centralized" && result.metadataResponseTimeMs !== undefined && (
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            result.metadataIsSlow 
+                              ? "bg-orange-500/20 text-orange-500" 
+                              : "bg-foreground/10 text-foreground-muted"
+                          }`} title={result.metadataIsSlow ? "Server response is slow (>1s)" : "Server response time"}>
+                            {result.metadataResponseTimeMs}ms{result.metadataIsSlow && " 🐢"}
+                          </span>
+                        )}
                         {result.metadataStorage === "ipfs" && result.metadataIpfsPinStatus && (
                           <span className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
                             result.metadataIpfsPinStatus === "pinned" 
@@ -626,6 +643,15 @@ export default function TokenScanPage({
                             ? mainDomain(result.imageCentralizedDomain)
                             : storageLabel(result.imageStorage)}
                         </span>
+                        {result.imageStorage === "centralized" && result.imageResponseTimeMs !== undefined && (
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            result.imageIsSlow 
+                              ? "bg-orange-500/20 text-orange-500" 
+                              : "bg-foreground/10 text-foreground-muted"
+                          }`} title={result.imageIsSlow ? "Server response is slow (>1s)" : "Server response time"}>
+                            {result.imageResponseTimeMs}ms{result.imageIsSlow && " 🐢"}
+                          </span>
+                        )}
                         {result.imageStorage === "ipfs" && result.imageIpfsPinStatus && (
                           <span className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
                             result.imageIpfsPinStatus === "pinned" 

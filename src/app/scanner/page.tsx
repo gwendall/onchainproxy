@@ -42,6 +42,11 @@ type NftItem = {
   // URIs
   metadataUri?: string;
   imageUri?: string;
+  // Response time for centralized hosts
+  metadataResponseTimeMs?: number;
+  metadataIsSlow?: boolean;
+  imageResponseTimeMs?: number;
+  imageIsSlow?: boolean;
 };
 
 const shortAddress = (addr: string) => {
@@ -335,10 +340,20 @@ export default function ScannerPage() {
     window.localStorage.setItem("onchainproxy:scanner:viewMode", viewMode);
   }, [viewMode]);
   
-  // Keep ref in sync with state
+  // Keep ref in sync with state - update synchronously in the setter
+  // The useEffect is kept as a fallback for external state changes
   useEffect(() => {
     nftsRef.current = nfts;
   }, [nfts]);
+  
+  // Wrapper to update both state and ref synchronously
+  const setNftsSync = useCallback((updater: React.SetStateAction<NftItem[]>) => {
+    setNfts((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      nftsRef.current = next; // Update ref synchronously
+      return next;
+    });
+  }, []);
 
   // Update current time every second while scanning for live ETA
   useEffect(() => {
@@ -527,9 +542,9 @@ export default function ScannerPage() {
     // Use ref to get latest nfts state
     const current = nftsRef.current[idx];
     if (!current) return;
-    if (!force && (current.status === "ok" || current.status === "error")) return;
+    if (!force && (current.status === "ok" || current.status === "error" || current.status === "scanning")) return;
 
-    setNfts((prev) => {
+    setNftsSync((prev) => {
       const next = [...prev];
       const it = next[idx];
       if (!it) return prev;
@@ -541,7 +556,7 @@ export default function ScannerPage() {
       const status = await checkNftStatus(current.chain, current.contract, current.tokenId);
       if (runId !== runIdRef.current || cancelRef.current) return;
 
-      setNfts((prev) => {
+      setNftsSync((prev) => {
         const next = [...prev];
         const it = next[idx];
         if (!it) return prev;
@@ -564,12 +579,16 @@ export default function ScannerPage() {
           imageIpfsPinStatus: status.imageIpfsPinStatus,
           metadataUri: status.metadataUri,
           imageUri: status.imageUri,
+          metadataResponseTimeMs: status.metadataResponseTimeMs,
+          metadataIsSlow: status.metadataIsSlow,
+          imageResponseTimeMs: status.imageResponseTimeMs,
+          imageIsSlow: status.imageIsSlow,
         };
         return next;
       });
     } catch {
       if (runId !== runIdRef.current || cancelRef.current) return;
-      setNfts((prev) => {
+      setNftsSync((prev) => {
         const next = [...prev];
         const it = next[idx];
         if (!it) return prev;
@@ -585,7 +604,7 @@ export default function ScannerPage() {
         return next;
       });
     }
-  }, []);
+  }, [setNftsSync]);
 
   const startScan = useCallback(async () => {
     const nftsLength = nftsRef.current.length;
@@ -605,7 +624,8 @@ export default function ScannerPage() {
       for (let i = 0; i < nftsLength; i++) {
         if (runId !== runIdRef.current || cancelRef.current) break;
         const item = nftsRef.current[i];
-        if (!item || item.status === "ok" || item.status === "error") continue;
+        // Skip if already processed or currently being scanned
+        if (!item || item.status === "ok" || item.status === "error" || item.status === "scanning") continue;
         foundPending = true;
         await scanOne(i, { runId });
       }
@@ -1390,6 +1410,15 @@ export default function ScannerPage() {
                             {selectedNft.metadataStorage === "centralized" && selectedNft.metadataCentralizedDomain && (
                               <span className="text-foreground-muted" title={selectedNft.metadataCentralizedDomain}>({mainDomain(selectedNft.metadataCentralizedDomain)})</span>
                             )}
+                            {selectedNft.metadataStorage === "centralized" && selectedNft.metadataResponseTimeMs !== undefined && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                selectedNft.metadataIsSlow 
+                                  ? "bg-orange-500/20 text-orange-500" 
+                                  : "bg-foreground/10 text-foreground-muted"
+                              }`} title={selectedNft.metadataIsSlow ? "Server response is slow (>1s)" : "Server response time"}>
+                                {selectedNft.metadataResponseTimeMs}ms{selectedNft.metadataIsSlow && " 🐢"}
+                              </span>
+                            )}
                             {selectedNft.metadataStorage === "ipfs" && selectedNft.metadataIpfsPinStatus && (
                               <span className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${
                                 selectedNft.metadataIpfsPinStatus === "pinned" 
@@ -1479,6 +1508,15 @@ export default function ScannerPage() {
                             </span>
                             {selectedNft.imageStorage === "centralized" && selectedNft.imageCentralizedDomain && (
                               <span className="text-foreground-muted" title={selectedNft.imageCentralizedDomain}>({mainDomain(selectedNft.imageCentralizedDomain)})</span>
+                            )}
+                            {selectedNft.imageStorage === "centralized" && selectedNft.imageResponseTimeMs !== undefined && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                selectedNft.imageIsSlow 
+                                  ? "bg-orange-500/20 text-orange-500" 
+                                  : "bg-foreground/10 text-foreground-muted"
+                              }`} title={selectedNft.imageIsSlow ? "Server response is slow (>1s)" : "Server response time"}>
+                                {selectedNft.imageResponseTimeMs}ms{selectedNft.imageIsSlow && " 🐢"}
+                              </span>
                             )}
                             {selectedNft.imageStorage === "ipfs" && selectedNft.imageIpfsPinStatus && (
                               <span className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${

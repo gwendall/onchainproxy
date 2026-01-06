@@ -289,6 +289,11 @@ export type NftStatusResult = {
   // URIs
   metadataUri?: string;
   imageUri?: string;
+  // Response time for centralized hosts
+  metadataResponseTimeMs?: number;
+  metadataIsSlow?: boolean;
+  imageResponseTimeMs?: number;
+  imageIsSlow?: boolean;
 };
 
 export type NftInfo = {
@@ -394,6 +399,46 @@ const extractDomain = (uri: string | undefined): string | null => {
   }
 };
 
+// Measure response time and analyze if the host is slow
+// Uses TTFB (Time To First Byte) as the main metric since it's independent of file size
+// TTFB > 2000ms is considered slow regardless of file size
+// For smaller files (<1MB), TTFB > 1000ms is also considered slow
+const analyzeResponseTime = (responseTimeMs: number, sizeBytes?: number): ResponseTimeAnalysis => {
+  // Calculate throughput if size is known
+  const throughputKBps = sizeBytes && responseTimeMs > 0 
+    ? Math.round((sizeBytes / 1024) / (responseTimeMs / 1000)) 
+    : undefined;
+  
+  // Determine if slow:
+  // - TTFB > 2000ms = definitely slow server
+  // - TTFB > 1000ms for files < 1MB = likely slow server
+  // - We don't penalize for large files that take time
+  const isLargeFile = sizeBytes && sizeBytes > 1024 * 1024; // > 1MB
+  const isSlow = responseTimeMs > 2000 || (!isLargeFile && responseTimeMs > 1000);
+  
+  return {
+    responseTimeMs,
+    isSlow,
+    throughputKBps,
+  };
+};
+
+// Fetch with timing - returns response and timing info
+const fetchWithTiming = async (url: string, options?: RequestInit): Promise<{ res: Response; responseTimeMs: number } | null> => {
+  try {
+    const start = performance.now();
+    const res = await fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(8000),
+      cache: "no-store",
+    });
+    const responseTimeMs = Math.round(performance.now() - start);
+    return { res, responseTimeMs };
+  } catch {
+    return null;
+  }
+};
+
 const checkIpfsAvailability = async (cid: string): Promise<{ available: boolean; gatewaysUp: number }> => {
   const results = await Promise.allSettled(
     IPFS_GATEWAYS.map(async (gateway) => {
@@ -493,6 +538,14 @@ const detectImageFormat = (contentType: string | null, magicBytes?: Buffer): Ima
   return "unknown";
 };
 
+// Response time analysis for centralized hosts
+export type ResponseTimeAnalysis = {
+  responseTimeMs: number;
+  isSlow: boolean;
+  // Throughput in KB/s if size is known
+  throughputKBps?: number;
+};
+
 export type NftAuditResult = {
   ok: boolean;
   error?: string;
@@ -510,6 +563,7 @@ export type NftAuditResult = {
     ipfsPinStatus?: IpfsPinStatus;
     ipfsGatewaysUp?: number;
     centralizedDomain?: string;
+    responseTime?: ResponseTimeAnalysis;
     raw?: unknown;
   };
   
@@ -524,6 +578,7 @@ export type NftAuditResult = {
     ipfsPinStatus?: IpfsPinStatus;
     ipfsGatewaysUp?: number;
     centralizedDomain?: string;
+    responseTime?: ResponseTimeAnalysis;
     format?: ImageFormat;
     contentType?: string;
     sizeBytes?: number;
@@ -575,6 +630,15 @@ export async function auditNft(chain: string, contract: string, tokenId: string)
     metadataCentralizedDomain = extractDomain(metadataResult.metadataUrl || metadataResult.metadataUri) || undefined;
   }
   
+  // Measure response time for centralized metadata (via a quick HEAD request)
+  let metadataResponseTime: ResponseTimeAnalysis | undefined;
+  if (metadataStorageType === "centralized" && metadataResult.metadataUrl) {
+    const result = await fetchWithTiming(metadataResult.metadataUrl, { method: "HEAD" });
+    if (result?.res.ok) {
+      metadataResponseTime = analyzeResponseTime(result.responseTimeMs);
+    }
+  }
+  
   // Analyze image
   let imageAnalysis: NftAuditResult["image"] | undefined;
   
@@ -603,6 +667,9 @@ export async function auditNft(chain: string, contract: string, tokenId: string)
       imageCentralizedDomain = extractDomain(metadataResult.imageUrl || metadataResult.imageUri) || undefined;
     }
     
+    // Initialize image analysis
+    let imageResponseTime: ResponseTimeAnalysis | undefined;
+    
     imageAnalysis = {
       ok: false,
       uri: metadataResult.imageUri,
@@ -623,23 +690,26 @@ export async function auditNft(chain: string, contract: string, tokenId: string)
       imageAnalysis.contentType = mimeType || undefined;
       imageAnalysis.ok = true;
     } else if (metadataResult.imageUrl) {
-      // Fetch image headers to get format and size
-      try {
-        const res = await fetch(metadataResult.imageUrl, {
-          method: "HEAD",
-          signal: AbortSignal.timeout(5000),
-        });
+      // Fetch image headers to get format, size, AND response time in ONE request
+      const headResult = await fetchWithTiming(metadataResult.imageUrl, { method: "HEAD" });
+      
+      if (headResult?.res.ok) {
+        const contentType = headResult.res.headers.get("content-type");
+        const contentLength = headResult.res.headers.get("content-length");
+        const sizeBytes = contentLength ? parseInt(contentLength, 10) : undefined;
         
-        if (res.ok) {
-          const contentType = res.headers.get("content-type");
-          const contentLength = res.headers.get("content-length");
-          
-          imageAnalysis.ok = true;
-          imageAnalysis.contentType = contentType || undefined;
-          imageAnalysis.format = detectImageFormat(contentType);
-          imageAnalysis.sizeBytes = contentLength ? parseInt(contentLength, 10) : undefined;
-        } else {
-          // Try GET with range to get magic bytes
+        imageAnalysis.ok = true;
+        imageAnalysis.contentType = contentType || undefined;
+        imageAnalysis.format = detectImageFormat(contentType);
+        imageAnalysis.sizeBytes = sizeBytes;
+        
+        // Calculate response time analysis for centralized storage
+        if (imageStorageType === "centralized") {
+          imageResponseTime = analyzeResponseTime(headResult.responseTimeMs, sizeBytes);
+        }
+      } else {
+        // Try GET with range to get magic bytes (fallback)
+        try {
           const resGet = await fetch(metadataResult.imageUrl, {
             method: "GET",
             headers: { Range: "bytes=0-32" },
@@ -666,11 +736,16 @@ export async function auditNft(chain: string, contract: string, tokenId: string)
           } else {
             imageAnalysis.error = `Image fetch failed (${resGet.status})`;
           }
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "Unknown error";
+          imageAnalysis.error = msg;
         }
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        imageAnalysis.error = msg;
       }
+    }
+    
+    // Add response time to image analysis
+    if (imageResponseTime) {
+      imageAnalysis.responseTime = imageResponseTime;
     }
   }
 
@@ -686,6 +761,7 @@ export async function auditNft(chain: string, contract: string, tokenId: string)
       ipfsPinStatus: metadataIpfsPinStatus,
       ipfsGatewaysUp: metadataIpfsGatewaysUp,
       centralizedDomain: metadataCentralizedDomain,
+      responseTime: metadataResponseTime,
       raw: metadataResult.metadata,
     },
     image: imageAnalysis,
@@ -725,5 +801,9 @@ export async function checkNftStatus(chain: string, contract: string, tokenId: s
     imageIpfsPinStatus: audit.image?.ipfsPinStatus,
     metadataUri: audit.metadata?.url || audit.metadata?.uri,
     imageUri: audit.image?.url || audit.image?.uri,
+    metadataResponseTimeMs: audit.metadata?.responseTime?.responseTimeMs,
+    metadataIsSlow: audit.metadata?.responseTime?.isSlow,
+    imageResponseTimeMs: audit.image?.responseTime?.responseTimeMs,
+    imageIsSlow: audit.image?.responseTime?.isSlow,
   };
 }
