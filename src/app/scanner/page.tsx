@@ -88,6 +88,22 @@ const resetNftScan = (n: NftItem): NftItem => ({
   imageStatus: undefined,
 });
 
+const formatDuration = (ms: number): string => {
+  if (ms < 1000) return "<1s";
+  const totalSeconds = Math.round(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+  if (minutes > 0) {
+    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  }
+  return `${seconds}s`;
+};
+
 export default function ScannerPage() {
   const [input, setInput] = useState("");
   const [selectedChain, setSelectedChain] = useState<SupportedChain>("eth");
@@ -104,11 +120,21 @@ export default function ScannerPage() {
   const needsAutoScanRef = useRef(false);
   const nftsRef = useRef(nfts);
   const didRestoreRef = useRef(false);
+  const [currentTime, setCurrentTime] = useState(Date.now());
   
   // Keep ref in sync with state
   useEffect(() => {
     nftsRef.current = nfts;
   }, [nfts]);
+
+  // Update current time every second while scanning for live ETA
+  useEffect(() => {
+    if (!isScanning) return;
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isScanning]);
 
   // Restore session from localStorage after hydration (runs once)
   useEffect(() => {
@@ -164,9 +190,11 @@ export default function ScannerPage() {
     const transientErrors = nfts.filter((n) => n.status === "error" && n.isTransient).length;
 
     const scannedOrTotal = scanned > 0 ? scanned : total;
-    const pct = (num: number, den: number) => {
+    const pct = (num: number, den: number, decimals = 0) => {
       if (!den || den <= 0) return 0;
-      return Math.round((num / den) * 100);
+      const value = (num / den) * 100;
+      const factor = Math.pow(10, decimals);
+      return Math.round(value * factor) / factor;
     };
 
     const metadataBrokenPct = pct(metadataDown, scannedOrTotal);
@@ -180,7 +208,7 @@ export default function ScannerPage() {
     return {
       total,
       scanned,
-      progressPct: pct(scanned, total),
+      progressPct: pct(scanned, total, 1),
       metadataLive,
       metadataDown,
       metadataUnknown,
@@ -195,6 +223,25 @@ export default function ScannerPage() {
       brokenAssetsPct,
     };
   }, [nfts]);
+
+  // Calculate ETA based on current scan speed
+  const eta = useMemo(() => {
+    if (!scanStartedAt || stats.scanned === 0 || stats.scanned >= stats.total) {
+      return null;
+    }
+    
+    const elapsed = currentTime - scanStartedAt;
+    const avgTimePerItem = elapsed / stats.scanned;
+    const remaining = stats.total - stats.scanned;
+    const estimatedRemaining = avgTimePerItem * remaining;
+    
+    return {
+      elapsed,
+      remaining: estimatedRemaining,
+      avgPerItem: avgTimePerItem,
+      speed: (1000 / avgTimePerItem).toFixed(1), // items per second
+    };
+  }, [scanStartedAt, stats.scanned, stats.total, currentTime]);
 
   const hasPending = useMemo(
     () => nfts.some((n) => n.status === "pending" || n.status === "scanning"),
@@ -518,8 +565,15 @@ export default function ScannerPage() {
                   ) : null}
                 </div>
 
-                <div className="text-foreground font-bold">
-                  {stats.progressPct}%
+                <div className="flex items-center gap-4">
+                  {isScanning && eta ? (
+                    <div className="text-foreground-faint text-sm">
+                      <span title={`${eta.speed} items/s`}>~{formatDuration(eta.remaining)} left</span>
+                    </div>
+                  ) : null}
+                  <div className="text-foreground font-bold">
+                    {stats.progressPct.toFixed(1)}%
+                  </div>
                 </div>
               </div>
             </div>
