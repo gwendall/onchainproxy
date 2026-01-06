@@ -276,6 +276,14 @@ export type NftStatusResult = {
   isTransient?: boolean;
   imageError?: string;
   imageErrorSource?: ErrorSource;
+  // Audit data
+  metadataStorage?: StorageType;
+  imageStorage?: StorageType;
+  imageFormat?: ImageFormat;
+  imageSizeBytes?: number;
+  // IPFS pin status
+  metadataIpfsPinStatus?: IpfsPinStatus;
+  imageIpfsPinStatus?: IpfsPinStatus;
 };
 
 export type NftInfo = {
@@ -318,7 +326,195 @@ export async function fetchNftInfo(chain: SupportedChain, contract: string, toke
   }
 }
 
-export async function checkNftStatus(chain: string, contract: string, tokenId: string): Promise<NftStatusResult> {
+// Storage type detection
+type StorageType = "onchain" | "ipfs" | "arweave" | "centralized" | "unknown";
+
+// IPFS pin status
+type IpfsPinStatus = "pinned" | "available" | "unavailable" | "unknown";
+
+// Known IPFS pinning services - if content is served from these, it's likely pinned
+const KNOWN_PINNING_SERVICES = [
+  "pinata.cloud",
+  "gateway.pinata.cloud",
+  "nftstorage.link",
+  "nft.storage",
+  "dweb.link",
+  "w3s.link",
+  "infura-ipfs.io",
+  "cloudflare-ipfs.com",
+  "cf-ipfs.com",
+  "fleek.co",
+  "fleek.cool",
+  "4everland.io",
+  "thirdweb.com",
+];
+
+// Alternative IPFS gateways to check availability
+const IPFS_GATEWAYS = [
+  "https://ipfs.io/ipfs/",
+  "https://cloudflare-ipfs.com/ipfs/",
+  "https://dweb.link/ipfs/",
+];
+
+const extractIpfsCid = (uri: string | undefined): string | null => {
+  if (!uri) return null;
+  
+  // ipfs://CID or ipfs://ipfs/CID
+  if (uri.startsWith("ipfs://")) {
+    const path = uri.slice(7);
+    // Remove ipfs/ prefix if present
+    const cleaned = path.startsWith("ipfs/") ? path.slice(5) : path;
+    // Extract CID (before any path)
+    return cleaned.split("/")[0] || null;
+  }
+  
+  // HTTP gateway URL with /ipfs/CID
+  const match = uri.match(/\/ipfs\/([a-zA-Z0-9]+)/);
+  return match?.[1] || null;
+};
+
+const isFromPinningService = (uri: string | undefined): boolean => {
+  if (!uri) return false;
+  const u = uri.toLowerCase();
+  return KNOWN_PINNING_SERVICES.some((service) => u.includes(service));
+};
+
+const checkIpfsAvailability = async (cid: string): Promise<{ available: boolean; gatewaysUp: number }> => {
+  const results = await Promise.allSettled(
+    IPFS_GATEWAYS.map(async (gateway) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      try {
+        const res = await fetch(`${gateway}${cid}`, {
+          method: "HEAD",
+          signal: controller.signal,
+        });
+        return res.ok || res.status === 429; // 429 = rate limited but available
+      } finally {
+        clearTimeout(timeout);
+      }
+    })
+  );
+  
+  const gatewaysUp = results.filter(
+    (r) => r.status === "fulfilled" && r.value === true
+  ).length;
+  
+  return {
+    available: gatewaysUp > 0,
+    gatewaysUp,
+  };
+};
+
+const detectStorageType = (uri: string | undefined): StorageType => {
+  if (!uri) return "unknown";
+  const u = uri.toLowerCase();
+  
+  // On-chain data URLs
+  if (u.startsWith("data:")) return "onchain";
+  
+  // IPFS
+  if (u.startsWith("ipfs://") || u.includes("/ipfs/") || u.includes("ipfs.io") || u.includes("pinata") || u.includes("nftstorage")) {
+    return "ipfs";
+  }
+  
+  // Arweave
+  if (u.startsWith("ar://") || u.includes("arweave.net") || u.includes("arweave.dev")) {
+    return "arweave";
+  }
+  
+  // If it's an HTTP URL that's not IPFS/Arweave gateway, it's centralized
+  if (u.startsWith("http://") || u.startsWith("https://")) {
+    return "centralized";
+  }
+  
+  return "unknown";
+};
+
+// Image format detection from content-type or magic bytes
+type ImageFormat = "png" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "avif" | "unknown";
+
+const detectImageFormat = (contentType: string | null, magicBytes?: Buffer): ImageFormat => {
+  const ct = (contentType || "").toLowerCase();
+  
+  // Try content-type first
+  if (ct.includes("image/png")) return "png";
+  if (ct.includes("image/jpeg") || ct.includes("image/jpg")) return "jpeg";
+  if (ct.includes("image/gif")) return "gif";
+  if (ct.includes("image/webp")) return "webp";
+  if (ct.includes("image/svg")) return "svg";
+  if (ct.includes("image/bmp")) return "bmp";
+  if (ct.includes("image/avif")) return "avif";
+  
+  // Try magic bytes if available
+  if (magicBytes && magicBytes.length >= 4) {
+    // PNG: 89 50 4E 47
+    if (magicBytes[0] === 0x89 && magicBytes[1] === 0x50 && magicBytes[2] === 0x4E && magicBytes[3] === 0x47) {
+      return "png";
+    }
+    // JPEG: FF D8 FF
+    if (magicBytes[0] === 0xFF && magicBytes[1] === 0xD8 && magicBytes[2] === 0xFF) {
+      return "jpeg";
+    }
+    // GIF: GIF87a or GIF89a
+    if (magicBytes.toString("ascii", 0, 3) === "GIF") {
+      return "gif";
+    }
+    // WebP: RIFF....WEBP
+    if (magicBytes.toString("ascii", 0, 4) === "RIFF" && magicBytes.length >= 12 && magicBytes.toString("ascii", 8, 12) === "WEBP") {
+      return "webp";
+    }
+    // SVG: starts with < (after trimming)
+    const head = magicBytes.toString("utf8", 0, Math.min(100, magicBytes.length)).trimStart();
+    if (head.startsWith("<svg") || (head.startsWith("<?xml") && head.includes("<svg"))) {
+      return "svg";
+    }
+    // BMP: BM
+    if (magicBytes.toString("ascii", 0, 2) === "BM") {
+      return "bmp";
+    }
+  }
+  
+  return "unknown";
+};
+
+export type NftAuditResult = {
+  ok: boolean;
+  error?: string;
+  errorSource?: ErrorSource;
+  isTransient?: boolean;
+  
+  // Metadata analysis
+  metadata?: {
+    ok: boolean;
+    uri: string;
+    url: string;
+    storageType: StorageType;
+    isOnchain: boolean;
+    ipfsCid?: string;
+    ipfsPinStatus?: IpfsPinStatus;
+    ipfsGatewaysUp?: number;
+    raw?: unknown;
+  };
+  
+  // Image analysis
+  image?: {
+    ok: boolean;
+    uri?: string;
+    url?: string;
+    storageType: StorageType;
+    isOnchain: boolean;
+    ipfsCid?: string;
+    ipfsPinStatus?: IpfsPinStatus;
+    ipfsGatewaysUp?: number;
+    format?: ImageFormat;
+    contentType?: string;
+    sizeBytes?: number;
+    error?: string;
+  };
+};
+
+export async function auditNft(chain: string, contract: string, tokenId: string): Promise<NftAuditResult> {
   let metadataResult;
   
   try {
@@ -333,53 +529,162 @@ export async function checkNftStatus(chain: string, contract: string, tokenId: s
     const { source, message, isTransient } = classifyError(e);
     return {
       ok: false,
-      metadataOk: false,
-      imageOk: false,
       error: message,
       errorSource: source,
       isTransient,
     };
   }
 
-  // Metadata resolved successfully, now check image
-  let imageOk = false;
-  let imageError: string | undefined;
-  let imageErrorSource: ErrorSource | undefined;
-
-  if (metadataResult.imageUrl) {
-    try {
-      const res = await fetch(metadataResult.imageUrl, {
-        method: "HEAD",
-        signal: AbortSignal.timeout(5000),
-      });
-      if (res.ok) {
-        imageOk = true;
-      } else {
-        // Some servers block HEAD, try GET with range
-        const resGet = await fetch(metadataResult.imageUrl, {
-          method: "GET",
-          headers: { Range: "bytes=0-10" },
+  const metadataStorageType = detectStorageType(metadataResult.metadataUri);
+  
+  // Check IPFS pin status for metadata
+  let metadataIpfsCid: string | undefined;
+  let metadataIpfsPinStatus: IpfsPinStatus | undefined;
+  let metadataIpfsGatewaysUp: number | undefined;
+  
+  if (metadataStorageType === "ipfs") {
+    metadataIpfsCid = extractIpfsCid(metadataResult.metadataUri) || undefined;
+    
+    if (isFromPinningService(metadataResult.metadataUrl || metadataResult.metadataUri)) {
+      metadataIpfsPinStatus = "pinned";
+    } else if (metadataIpfsCid) {
+      // Check availability on multiple gateways
+      const { available, gatewaysUp } = await checkIpfsAvailability(metadataIpfsCid);
+      metadataIpfsGatewaysUp = gatewaysUp;
+      metadataIpfsPinStatus = available ? "available" : "unavailable";
+    }
+  }
+  
+  // Analyze image
+  let imageAnalysis: NftAuditResult["image"] | undefined;
+  
+  if (metadataResult.imageUri || metadataResult.imageUrl) {
+    const imageStorageType = detectStorageType(metadataResult.imageUri || metadataResult.imageUrl);
+    const isImageOnchain = metadataResult.imageUri?.startsWith("data:") ?? false;
+    
+    // Check IPFS pin status for image
+    let imageIpfsCid: string | undefined;
+    let imageIpfsPinStatus: IpfsPinStatus | undefined;
+    let imageIpfsGatewaysUp: number | undefined;
+    
+    if (imageStorageType === "ipfs" && !isImageOnchain) {
+      imageIpfsCid = extractIpfsCid(metadataResult.imageUri || metadataResult.imageUrl) || undefined;
+      
+      if (isFromPinningService(metadataResult.imageUrl || metadataResult.imageUri)) {
+        imageIpfsPinStatus = "pinned";
+      } else if (imageIpfsCid) {
+        // Check availability on multiple gateways
+        const { available, gatewaysUp } = await checkIpfsAvailability(imageIpfsCid);
+        imageIpfsGatewaysUp = gatewaysUp;
+        imageIpfsPinStatus = available ? "available" : "unavailable";
+      }
+    }
+    
+    imageAnalysis = {
+      ok: false,
+      uri: metadataResult.imageUri,
+      url: metadataResult.imageUrl,
+      storageType: imageStorageType,
+      isOnchain: isImageOnchain,
+      ipfsCid: imageIpfsCid,
+      ipfsPinStatus: imageIpfsPinStatus,
+      ipfsGatewaysUp: imageIpfsGatewaysUp,
+    };
+    
+    // If on-chain, try to detect format from data URL
+    if (isImageOnchain && metadataResult.imageUri) {
+      const match = metadataResult.imageUri.match(/^data:([^;,]+)/);
+      const mimeType = match?.[1] || null;
+      imageAnalysis.format = detectImageFormat(mimeType);
+      imageAnalysis.contentType = mimeType || undefined;
+      imageAnalysis.ok = true;
+    } else if (metadataResult.imageUrl) {
+      // Fetch image headers to get format and size
+      try {
+        const res = await fetch(metadataResult.imageUrl, {
+          method: "HEAD",
           signal: AbortSignal.timeout(5000),
         });
-        if (resGet.ok) {
-          imageOk = true;
+        
+        if (res.ok) {
+          const contentType = res.headers.get("content-type");
+          const contentLength = res.headers.get("content-length");
+          
+          imageAnalysis.ok = true;
+          imageAnalysis.contentType = contentType || undefined;
+          imageAnalysis.format = detectImageFormat(contentType);
+          imageAnalysis.sizeBytes = contentLength ? parseInt(contentLength, 10) : undefined;
         } else {
-          imageError = `Image fetch failed (${resGet.status})`;
-          imageErrorSource = "image_fetch";
+          // Try GET with range to get magic bytes
+          const resGet = await fetch(metadataResult.imageUrl, {
+            method: "GET",
+            headers: { Range: "bytes=0-32" },
+            signal: AbortSignal.timeout(5000),
+          });
+          
+          if (resGet.ok || resGet.status === 206) {
+            const contentType = resGet.headers.get("content-type");
+            const contentRange = resGet.headers.get("content-range");
+            const ab = await resGet.arrayBuffer();
+            const magicBytes = Buffer.from(ab);
+            
+            imageAnalysis.ok = true;
+            imageAnalysis.contentType = contentType || undefined;
+            imageAnalysis.format = detectImageFormat(contentType, magicBytes);
+            
+            // Parse content-range for total size: "bytes 0-32/12345"
+            if (contentRange) {
+              const sizeMatch = contentRange.match(/\/(\d+)$/);
+              if (sizeMatch) {
+                imageAnalysis.sizeBytes = parseInt(sizeMatch[1], 10);
+              }
+            }
+          } else {
+            imageAnalysis.error = `Image fetch failed (${resGet.status})`;
+          }
         }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        imageAnalysis.error = msg;
       }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Unknown error";
-      const isNetwork = msg.toLowerCase().includes("timeout") || 
-                       msg.toLowerCase().includes("abort") ||
-                       msg.toLowerCase().includes("fetch");
-      imageError = msg;
-      imageErrorSource = isNetwork ? "rpc" : "image_fetch";
     }
-  } else {
-    // No image URL in metadata - this might be intentional (e.g. some NFTs)
-    imageOk = true; // Don't mark as error if there's simply no image field
   }
+
+  return {
+    ok: true,
+    metadata: {
+      ok: true,
+      uri: metadataResult.metadataUri,
+      url: metadataResult.metadataUrl,
+      storageType: metadataStorageType,
+      isOnchain: metadataResult.metadataUri.startsWith("data:"),
+      ipfsCid: metadataIpfsCid,
+      ipfsPinStatus: metadataIpfsPinStatus,
+      ipfsGatewaysUp: metadataIpfsGatewaysUp,
+      raw: metadataResult.metadata,
+    },
+    image: imageAnalysis,
+  };
+}
+
+export async function checkNftStatus(chain: string, contract: string, tokenId: string): Promise<NftStatusResult> {
+  // Use the audit function internally for detailed analysis
+  const audit = await auditNft(chain, contract, tokenId);
+  
+  if (!audit.ok) {
+    return {
+      ok: false,
+      metadataOk: false,
+      imageOk: false,
+      error: audit.error,
+      errorSource: audit.errorSource,
+      isTransient: audit.isTransient,
+    };
+  }
+
+  const imageOk = audit.image?.ok ?? true; // No image = ok
+  const imageError = audit.image?.error;
+  const imageErrorSource: ErrorSource | undefined = imageError ? "image_fetch" : undefined;
 
   return {
     ok: true,
@@ -387,5 +692,11 @@ export async function checkNftStatus(chain: string, contract: string, tokenId: s
     imageOk,
     imageError,
     imageErrorSource,
+    metadataStorage: audit.metadata?.storageType,
+    imageStorage: audit.image?.storageType,
+    imageFormat: audit.image?.format,
+    imageSizeBytes: audit.image?.sizeBytes,
+    metadataIpfsPinStatus: audit.metadata?.ipfsPinStatus,
+    imageIpfsPinStatus: audit.image?.ipfsPinStatus,
   };
 }

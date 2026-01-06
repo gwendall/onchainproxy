@@ -10,6 +10,9 @@ import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { SUPPORTED_CHAINS, type SupportedChain } from "@/lib/nft/chain";
 
 type ErrorSource = "rpc" | "contract" | "metadata_fetch" | "parsing" | "image_fetch" | "unknown";
+type StorageType = "onchain" | "ipfs" | "arweave" | "centralized" | "unknown";
+type ImageFormat = "png" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "avif" | "unknown";
+type IpfsPinStatus = "pinned" | "available" | "unavailable" | "unknown";
 
 type NftItem = {
   contract: string;
@@ -25,6 +28,14 @@ type NftItem = {
   metadataStatus?: "ok" | "error";
   imageStatus?: "ok" | "error";
   imageError?: string;
+  // Audit data
+  metadataStorage?: StorageType;
+  imageStorage?: StorageType;
+  imageFormat?: ImageFormat;
+  imageSizeBytes?: number;
+  // IPFS pin status
+  metadataIpfsPinStatus?: IpfsPinStatus;
+  imageIpfsPinStatus?: IpfsPinStatus;
 };
 
 const shortAddress = (addr: string) => {
@@ -102,6 +113,50 @@ const formatDuration = (ms: number): string => {
     return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
   }
   return `${seconds}s`;
+};
+
+const formatBytes = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+};
+
+const storageLabel = (type: StorageType | undefined): string => {
+  switch (type) {
+    case "onchain": return "On-chain";
+    case "ipfs": return "IPFS";
+    case "arweave": return "Arweave";
+    case "centralized": return "Centralized";
+    default: return "Unknown";
+  }
+};
+
+const storageColor = (type: StorageType | undefined): string => {
+  switch (type) {
+    case "onchain": return "text-green-500";
+    case "ipfs": return "text-blue-500";
+    case "arweave": return "text-purple-500";
+    case "centralized": return "text-yellow-600";
+    default: return "text-foreground-faint";
+  }
+};
+
+const ipfsPinLabel = (status: IpfsPinStatus | undefined): string => {
+  switch (status) {
+    case "pinned": return "📌";
+    case "available": return "✓";
+    case "unavailable": return "⚠";
+    default: return "";
+  }
+};
+
+const ipfsPinTooltip = (status: IpfsPinStatus | undefined): string => {
+  switch (status) {
+    case "pinned": return "Pinned (served by known pinning service)";
+    case "available": return "Available on IPFS gateways (may not be pinned)";
+    case "unavailable": return "Not available on checked gateways - may be unpinned";
+    default: return "";
+  }
 };
 
 export default function ScannerPage() {
@@ -205,6 +260,27 @@ export default function ScannerPage() {
     ).length;
     const brokenAssetsPct = pct(brokenAssets, scannedOrTotal);
 
+    // Storage stats (only for scanned items)
+    const scannedItems = nfts.filter((n) => n.status === "ok" || n.status === "error");
+    const metadataOnchain = scannedItems.filter((n) => n.metadataStorage === "onchain").length;
+    const metadataIpfs = scannedItems.filter((n) => n.metadataStorage === "ipfs").length;
+    const metadataArweave = scannedItems.filter((n) => n.metadataStorage === "arweave").length;
+    const metadataCentralized = scannedItems.filter((n) => n.metadataStorage === "centralized").length;
+    
+    const imageOnchain = scannedItems.filter((n) => n.imageStorage === "onchain").length;
+    const imageIpfs = scannedItems.filter((n) => n.imageStorage === "ipfs").length;
+    const imageArweave = scannedItems.filter((n) => n.imageStorage === "arweave").length;
+    const imageCentralized = scannedItems.filter((n) => n.imageStorage === "centralized").length;
+    
+    // IPFS pin stats
+    const metadataIpfsPinned = scannedItems.filter((n) => n.metadataStorage === "ipfs" && n.metadataIpfsPinStatus === "pinned").length;
+    const metadataIpfsAvailable = scannedItems.filter((n) => n.metadataStorage === "ipfs" && n.metadataIpfsPinStatus === "available").length;
+    const metadataIpfsUnavailable = scannedItems.filter((n) => n.metadataStorage === "ipfs" && n.metadataIpfsPinStatus === "unavailable").length;
+    
+    const imageIpfsPinned = scannedItems.filter((n) => n.imageStorage === "ipfs" && n.imageIpfsPinStatus === "pinned").length;
+    const imageIpfsAvailable = scannedItems.filter((n) => n.imageStorage === "ipfs" && n.imageIpfsPinStatus === "available").length;
+    const imageIpfsUnavailable = scannedItems.filter((n) => n.imageStorage === "ipfs" && n.imageIpfsPinStatus === "unavailable").length;
+
     return {
       total,
       scanned,
@@ -221,6 +297,22 @@ export default function ScannerPage() {
       imageBrokenPct,
       brokenAssets,
       brokenAssetsPct,
+      // Storage breakdown
+      metadataOnchain,
+      metadataIpfs,
+      metadataArweave,
+      metadataCentralized,
+      imageOnchain,
+      imageIpfs,
+      imageArweave,
+      imageCentralized,
+      // IPFS pin stats
+      metadataIpfsPinned,
+      metadataIpfsAvailable,
+      metadataIpfsUnavailable,
+      imageIpfsPinned,
+      imageIpfsAvailable,
+      imageIpfsUnavailable,
     };
   }, [nfts]);
 
@@ -304,6 +396,12 @@ export default function ScannerPage() {
           errorSource: status.errorSource,
           isTransient: status.isTransient,
           imageError: status.imageError,
+          metadataStorage: status.metadataStorage,
+          imageStorage: status.imageStorage,
+          imageFormat: status.imageFormat,
+          imageSizeBytes: status.imageSizeBytes,
+          metadataIpfsPinStatus: status.metadataIpfsPinStatus,
+          imageIpfsPinStatus: status.imageIpfsPinStatus,
         };
         return next;
       });
@@ -645,6 +743,78 @@ export default function ScannerPage() {
                   </div>
                 </div>
               </div>
+              
+              {stats.scanned > 0 && (
+                <div className="mt-6 pt-4 border-t border-foreground-faint/20">
+                  <div className="text-foreground-faint mb-3">Storage Breakdown</div>
+                  <div className="flex flex-wrap gap-x-8 gap-y-4 text-foreground-muted">
+                    <div className="space-y-1">
+                      <div className="text-foreground-faint text-sm">Metadata</div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
+                        {stats.metadataOnchain > 0 && (
+                          <span className="text-green-500" title="Fully on-chain metadata">
+                            {stats.metadataOnchain} on-chain
+                          </span>
+                        )}
+                        {stats.metadataIpfs > 0 && (
+                          <span className="text-blue-500" title="Stored on IPFS">
+                            {stats.metadataIpfs} IPFS
+                            {(stats.metadataIpfsPinned > 0 || stats.metadataIpfsUnavailable > 0) && (
+                              <span className="text-foreground-faint ml-1">
+                                ({stats.metadataIpfsPinned > 0 && <span title="Pinned">📌{stats.metadataIpfsPinned}</span>}
+                                {stats.metadataIpfsAvailable > 0 && <span title="Available but may not be pinned" className="ml-1">✓{stats.metadataIpfsAvailable}</span>}
+                                {stats.metadataIpfsUnavailable > 0 && <span title="Unavailable - may be unpinned" className="text-red-500 ml-1">⚠{stats.metadataIpfsUnavailable}</span>})
+                              </span>
+                            )}
+                          </span>
+                        )}
+                        {stats.metadataArweave > 0 && (
+                          <span className="text-purple-500" title="Stored on Arweave">
+                            {stats.metadataArweave} Arweave
+                          </span>
+                        )}
+                        {stats.metadataCentralized > 0 && (
+                          <span className="text-yellow-600" title="Centralized server">
+                            {stats.metadataCentralized} centralized
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-foreground-faint text-sm">Images</div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
+                        {stats.imageOnchain > 0 && (
+                          <span className="text-green-500" title="Fully on-chain image">
+                            {stats.imageOnchain} on-chain
+                          </span>
+                        )}
+                        {stats.imageIpfs > 0 && (
+                          <span className="text-blue-500" title="Stored on IPFS">
+                            {stats.imageIpfs} IPFS
+                            {(stats.imageIpfsPinned > 0 || stats.imageIpfsUnavailable > 0) && (
+                              <span className="text-foreground-faint ml-1">
+                                ({stats.imageIpfsPinned > 0 && <span title="Pinned">📌{stats.imageIpfsPinned}</span>}
+                                {stats.imageIpfsAvailable > 0 && <span title="Available but may not be pinned" className="ml-1">✓{stats.imageIpfsAvailable}</span>}
+                                {stats.imageIpfsUnavailable > 0 && <span title="Unavailable - may be unpinned" className="text-red-500 ml-1">⚠{stats.imageIpfsUnavailable}</span>})
+                              </span>
+                            )}
+                          </span>
+                        )}
+                        {stats.imageArweave > 0 && (
+                          <span className="text-purple-500" title="Stored on Arweave">
+                            {stats.imageArweave} Arweave
+                          </span>
+                        )}
+                        {stats.imageCentralized > 0 && (
+                          <span className="text-yellow-600" title="Centralized server">
+                            {stats.imageCentralized} centralized
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </Section>
 
             <Section title={`Results (${stats.scanned}/${nfts.length})`}>
@@ -750,12 +920,46 @@ export default function ScannerPage() {
                           <div className="text-blue-500 animate-pulse">SCANNING</div>
                         ) : (
                           <div className="flex flex-wrap justify-end sm:flex-col sm:items-end gap-x-4 gap-y-1">
-                            <div className={nft.metadataStatus === "ok" ? "text-green-600" : nft.isTransient ? "text-yellow-600" : "text-red-500 font-bold"}>
-                              META: {nft.metadataStatus === "ok" ? "OK" : nft.isTransient ? "?" : "ERR"}
+                            <div className="flex items-center gap-2">
+                              {nft.metadataStorage && (
+                                <span className={`text-xs ${storageColor(nft.metadataStorage)}`} title="Metadata storage">
+                                  {storageLabel(nft.metadataStorage)}
+                                  {nft.metadataStorage === "ipfs" && nft.metadataIpfsPinStatus && (
+                                    <span className="ml-1" title={ipfsPinTooltip(nft.metadataIpfsPinStatus)}>
+                                      {ipfsPinLabel(nft.metadataIpfsPinStatus)}
+                                    </span>
+                                  )}
+                                </span>
+                              )}
+                              <span className={nft.metadataStatus === "ok" ? "text-green-600" : nft.isTransient ? "text-yellow-600" : "text-red-500 font-bold"}>
+                                META: {nft.metadataStatus === "ok" ? "OK" : nft.isTransient ? "?" : "ERR"}
+                              </span>
                             </div>
-                            <div className={nft.imageStatus === "ok" ? "text-green-600" : nft.imageError ? "text-yellow-600" : "text-red-500 font-bold"}>
-                              IMG: {nft.imageStatus === "ok" ? "OK" : nft.imageError ? "?" : "ERR"}
+                            <div className="flex items-center gap-2">
+                              {nft.imageStorage && (
+                                <span className={`text-xs ${storageColor(nft.imageStorage)}`} title="Image storage">
+                                  {storageLabel(nft.imageStorage)}
+                                  {nft.imageStorage === "ipfs" && nft.imageIpfsPinStatus && (
+                                    <span className="ml-1" title={ipfsPinTooltip(nft.imageIpfsPinStatus)}>
+                                      {ipfsPinLabel(nft.imageIpfsPinStatus)}
+                                    </span>
+                                  )}
+                                </span>
+                              )}
+                              <span className={nft.imageStatus === "ok" ? "text-green-600" : nft.imageError ? "text-yellow-600" : "text-red-500 font-bold"}>
+                                IMG: {nft.imageStatus === "ok" ? "OK" : nft.imageError ? "?" : "ERR"}
+                              </span>
                             </div>
+                            {(nft.imageFormat || nft.imageSizeBytes) && (
+                              <div className="text-xs text-foreground-faint flex items-center gap-1">
+                                {nft.imageFormat && nft.imageFormat !== "unknown" && (
+                                  <span className="uppercase">{nft.imageFormat}</span>
+                                )}
+                                {nft.imageSizeBytes && (
+                                  <span>({formatBytes(nft.imageSizeBytes)})</span>
+                                )}
+                              </div>
+                            )}
                             <button
                               type="button"
                               className="text-link hover:underline font-bold"
