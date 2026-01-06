@@ -1910,15 +1910,17 @@ export default function ScannerPage() {
       <ShareSheetDrawer
         open={shareDrawerOpen}
         onOpenChange={setShareDrawerOpen}
-        url={shareUrl}
+        shareUrl={shareUrl}
+        shareText={shareText}
         title="OnChain Scanner Report"
-        text={shareText}
         preview={shareImageBlob ? {
           type: "image",
           url: URL.createObjectURL(shareImageBlob),
         } : undefined}
-        platforms={["native", "x", "farcaster", "telegram", "whatsapp", "copy"]}
-      />
+        show={["native", "x", "telegram", "whatsapp", "copy"]}
+      >
+        <span className="sr-only">Share</span>
+      </ShareSheetDrawer>
       
       {/* Hidden Share Card for Image Generation */}
       <div className="fixed -left-[9999px] -top-[9999px]">
