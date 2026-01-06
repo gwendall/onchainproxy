@@ -312,8 +312,9 @@ export default function ScannerPage() {
   const shareCardRef = useRef<HTMLDivElement>(null);
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
-  const [validBrokenAssetKeys, setValidBrokenAssetKeys] = useState<Set<string>>(new Set());
   const [selectedNftIdx, setSelectedNftIdx] = useState<number | null>(null);
+  // Cache for loaded images as data URLs (for share card generation)
+  const imageCacheRef = useRef<Map<string, string>>(new Map());
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showErrorsOnly, setShowErrorsOnly] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -355,6 +356,35 @@ export default function ScannerPage() {
       color: { dark: "#000000", light: "#ffffff" },
     }).then(setQrCodeDataUrl).catch(() => {});
   }, [submittedTarget]);
+
+  // Cache images as data URLs in background for share card generation
+  useEffect(() => {
+    const cacheImage = async (nft: NftItem) => {
+      const key = `${nft.contract}-${nft.tokenId}`;
+      if (imageCacheRef.current.has(key)) return;
+      
+      const url = `/${nft.chain}/${nft.contract}/${nft.tokenId}/image?w=128&h=128`;
+      try {
+        const response = await fetch(url);
+        if (!response.ok) return;
+        const blob = await response.blob();
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        imageCacheRef.current.set(key, dataUrl);
+      } catch {
+        // Ignore cache failures
+      }
+    };
+    
+    // Cache images for scanned NFTs (browser will use HTTP cache if already loaded)
+    nfts
+      .filter(n => n.status === "ok" || n.status === "error")
+      .forEach(nft => void cacheImage(nft));
+  }, [nfts]);
   
   // Keep ref in sync with state - update synchronously in the setter
   // The useEffect is kept as a fallback for external state changes
@@ -721,38 +751,25 @@ export default function ScannerPage() {
     setSelectedNftIdx(null);
   }, [cancelScan, submittedTarget, submittedChain]);
 
+  // Get cached images for share card (only images we've already loaded)
+  const getCachedBrokenAssets = useCallback(() => {
+    const brokenAssets = nfts.filter(
+      (n) => (n.imageStatus === "error" || n.metadataStatus === "error")
+    );
+    // Return only assets that have cached images
+    return brokenAssets.filter(nft => {
+      const key = `${nft.contract}-${nft.tokenId}`;
+      return imageCacheRef.current.has(key);
+    });
+  }, [nfts]);
+
   // Share/download report as image
   const shareReport = useCallback(async () => {
     if (!shareCardRef.current || isGeneratingShare) return;
     
     setIsGeneratingShare(true);
     try {
-      // Pre-check which broken asset images can actually load
-      const brokenAssets = nfts.filter(
-        (n) => (n.imageStatus === "error" || n.metadataStatus === "error")
-      );
-      
-      const validKeys = new Set<string>();
-      await Promise.all(
-        brokenAssets.slice(0, 10).map(async (nft) => {
-          const key = `${nft.contract}-${nft.tokenId}`;
-          const url = `/${submittedChain}/${nft.contract}/${nft.tokenId}/image?w=128&h=128`;
-          try {
-            const res = await fetch(url, { method: "HEAD" });
-            if (res.ok) {
-              validKeys.add(key);
-            }
-          } catch {
-            // Image failed to load, don't add to valid set
-          }
-        })
-      );
-      setValidBrokenAssetKeys(validKeys);
-      
-      // Wait a tick for state to update and re-render
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      
-      // Generate the image (images use same-origin proxy endpoint, no CORS issues)
+      // Generate the image (uses cached data URLs, no network requests needed)
       const dataUrl = await toPng(shareCardRef.current, {
         quality: 1,
         pixelRatio: 2,
@@ -790,7 +807,7 @@ export default function ScannerPage() {
     } finally {
       setIsGeneratingShare(false);
     }
-  }, [isGeneratingShare, nfts, submittedChain]);
+  }, [isGeneratingShare]);
 
   // Auto-start scan when NFTs are loaded and needsAutoScanRef is set
   useEffect(() => {
@@ -889,6 +906,21 @@ export default function ScannerPage() {
     if (!isValidTarget(input)) return;
 
     const target = input.trim();
+    
+    // Check if this is a rescan of the same target (scan already completed)
+    const isRescan = scanEndedAt && nfts.length > 0 && target.toLowerCase() === submittedTarget.toLowerCase();
+    
+    if (isRescan) {
+      // Reset all NFTs to pending and restart scan
+      forceRefreshRef.current = true;
+      setScanStartedAt(Date.now());
+      setScanEndedAt(null);
+      setNftsSync((prev) => prev.map((n) => resetNftScan(n)));
+      // Mark for auto-scan
+      needsAutoScanRef.current = true;
+      return;
+    }
+    
     if (restoreSession(target, selectedChain)) {
       // Auto-scan will be triggered by the effect when NFTs are loaded
       return;
@@ -1001,7 +1033,14 @@ export default function ScannerPage() {
                 disabled={!canSubmit}
                 className="w-full sm:w-auto px-6 py-2.5 bg-foreground text-background font-bold rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity inline-flex items-center justify-center gap-2"
               >
-                Scan
+                {scanEndedAt && nfts.length > 0 && inputTrimmed.toLowerCase() === submittedTarget.toLowerCase() ? (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    Rescan
+                  </>
+                ) : (
+                  "Scan"
+                )}
               </button>
             )}
           </form>
@@ -1989,41 +2028,41 @@ export default function ScannerPage() {
             </div>
           )}
           
-          {/* Broken Assets Gallery - only show images that passed validation */}
+          {/* Broken Assets Gallery - uses cached images only */}
           {(() => {
-            const allBroken = nfts.filter(
-              (n) => (n.imageStatus === "error" || n.metadataStatus === "error")
-            );
-            // Filter to only show validated images
-            const validBroken = allBroken.filter(
-              (n) => validBrokenAssetKeys.has(`${n.contract}-${n.tokenId}`)
-            );
+            const cachedBroken = getCachedBrokenAssets();
             const maxShow = 5;
-            const shown = validBroken.slice(0, maxShow);
-            // Count remaining as all broken minus shown (not just validated ones)
-            const totalBroken = allBroken.length;
+            const shown = cachedBroken.slice(0, maxShow);
+            // Count all broken assets for the +N indicator
+            const totalBroken = nfts.filter(
+              (n) => (n.imageStatus === "error" || n.metadataStatus === "error")
+            ).length;
             const remaining = totalBroken - shown.length;
             
-            // Don't show section if no validated images
+            // Don't show section if no cached images
             if (shown.length === 0) return null;
             
             return (
               <div className="mb-8">
                 <div className="text-gray-400 text-sm mb-3">Broken Assets</div>
                 <div className="flex gap-2">
-                  {shown.map((nft, i) => (
-                    <div
-                      key={`${nft.contract}-${nft.tokenId}-${i}`}
-                      className="w-14 h-14 rounded-lg overflow-hidden bg-white/5 border border-white/10 shrink-0"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={`/${submittedChain}/${nft.contract}/${nft.tokenId}/image?w=128&h=128`}
-                        alt=""
-                        className="w-full h-full object-cover opacity-70 scale-110"
-                      />
-                    </div>
-                  ))}
+                  {shown.map((nft, i) => {
+                    const key = `${nft.contract}-${nft.tokenId}`;
+                    const cachedDataUrl = imageCacheRef.current.get(key);
+                    return (
+                      <div
+                        key={`${key}-${i}`}
+                        className="w-14 h-14 rounded-lg overflow-hidden bg-white/5 border border-white/10 shrink-0"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={cachedDataUrl}
+                          alt=""
+                          className="w-full h-full object-cover opacity-70 scale-110"
+                        />
+                      </div>
+                    );
+                  })}
                   {remaining > 0 && (
                     <div className="w-14 h-14 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
                       <span className="text-gray-400 text-xs font-medium">+{remaining}</span>
