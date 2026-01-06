@@ -6,7 +6,7 @@ import Image from "next/image";
 import { isAddress } from "viem";
 import { Section } from "@/components/Section";
 import { scanNfts, checkNftStatus } from "./actions";
-import { ArrowLeft, ArrowUpRight } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Database, Box, HardDrive, Server, HelpCircle, Pin, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
 import { SUPPORTED_CHAINS, type SupportedChain } from "@/lib/nft/chain";
 
 type ErrorSource = "rpc" | "contract" | "metadata_fetch" | "parsing" | "image_fetch" | "unknown";
@@ -99,6 +99,25 @@ const resetNftScan = (n: NftItem): NftItem => ({
   imageStatus: undefined,
 });
 
+const StorageIcon = ({ type, className = "w-3 h-3" }: { type: StorageType | undefined; className?: string }) => {
+  switch (type) {
+    case "onchain": return <Database className={className} />;
+    case "ipfs": return <Box className={className} />;
+    case "arweave": return <HardDrive className={className} />;
+    case "centralized": return <Server className={className} />;
+    default: return <HelpCircle className={className} />;
+  }
+};
+
+const IpfsPinIcon = ({ status, className = "w-3 h-3" }: { status: IpfsPinStatus | undefined; className?: string }) => {
+  switch (status) {
+    case "pinned": return <Pin className={className} />;
+    case "available": return <CheckCircle2 className={className} />;
+    case "unavailable": return <AlertCircle className={className} />;
+    default: return null;
+  }
+};
+
 const formatDuration = (ms: number): string => {
   if (ms < 1000) return "<1s";
   const totalSeconds = Math.round(ms / 1000);
@@ -119,35 +138,6 @@ const formatBytes = (bytes: number): string => {
   if (bytes < 1024) return `${bytes}B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
-};
-
-const storageLabel = (type: StorageType | undefined): string => {
-  switch (type) {
-    case "onchain": return "On-chain";
-    case "ipfs": return "IPFS";
-    case "arweave": return "Arweave";
-    case "centralized": return "Centralized";
-    default: return "Unknown";
-  }
-};
-
-const storageColor = (type: StorageType | undefined): string => {
-  switch (type) {
-    case "onchain": return "text-green-500";
-    case "ipfs": return "text-blue-500";
-    case "arweave": return "text-purple-500";
-    case "centralized": return "text-yellow-600";
-    default: return "text-foreground-faint";
-  }
-};
-
-const ipfsPinLabel = (status: IpfsPinStatus | undefined): string => {
-  switch (status) {
-    case "pinned": return "📌";
-    case "available": return "✓";
-    case "unavailable": return "⚠";
-    default: return "";
-  }
 };
 
 const ipfsPinTooltip = (status: IpfsPinStatus | undefined): string => {
@@ -175,7 +165,7 @@ export default function ScannerPage() {
   const needsAutoScanRef = useRef(false);
   const nftsRef = useRef(nfts);
   const didRestoreRef = useRef(false);
-  const [currentTime, setCurrentTime] = useState(Date.now());
+  const [currentTime, setCurrentTime] = useState(0);
   
   // Keep ref in sync with state
   useEffect(() => {
@@ -854,42 +844,68 @@ export default function ScannerPage() {
                           </div>
                         ) : null}
                         
-                        <div className="text-foreground-faint flex items-center gap-x-3 min-w-0">
-                          <span className="shrink-0 font-mono">{shortAddress(nft.contract)}</span>
-                          <span className="min-w-0 truncate" title={`Token #${nft.tokenId}`}>
+                        <div className="text-foreground-faint flex items-center gap-x-3 text-xs font-mono">
+                          <span className="shrink-0" title={nft.contract}>{shortAddress(nft.contract)}</span>
+                          <span className="truncate" title={`Token #${nft.tokenId}`}>
                             #{nft.tokenId}
                           </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5">
                           <a 
                             href={`https://opensea.io/assets/${openSeaChainSlug(nft.chain)}/${nft.contract}/${nft.tokenId}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="shrink-0 inline-flex items-center gap-1 text-foreground-faint/70 hover:text-foreground hover:underline transition-colors"
+                            className="shrink-0 inline-flex items-center gap-1 text-foreground-faint/70 hover:text-foreground hover:underline transition-colors text-xs"
                           >
                             <span>OpenSea</span>
-                            <ArrowUpRight className="w-4 h-4" />
+                            <ArrowUpRight className="w-3 h-3" />
                           </a>
                           <a
                             href={`/${nft.chain}/${nft.contract}/${nft.tokenId}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="shrink-0 text-foreground-faint/70 hover:text-foreground hover:underline transition-colors"
+                            className="shrink-0 inline-flex items-center gap-1 text-foreground-faint/70 hover:text-foreground hover:underline transition-colors text-xs"
                           >
-                            Metadata
+                            <span>Metadata</span>
+                            <ArrowUpRight className="w-3 h-3" />
                           </a>
                           <a
                             href={`/${nft.chain}/${nft.contract}/${nft.tokenId}/image?raw=1`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="shrink-0 text-foreground-faint/70 hover:text-foreground hover:underline transition-colors"
+                            className="shrink-0 inline-flex items-center gap-1 text-foreground-faint/70 hover:text-foreground hover:underline transition-colors text-xs"
                           >
-                            Raw image
+                            <span>Raw image</span>
+                            <ArrowUpRight className="w-3 h-3" />
                           </a>
                           <Link
                             href={`/${nft.chain}/${nft.contract}/${nft.tokenId}/scan`}
-                            className="shrink-0 text-foreground-faint/70 hover:text-foreground hover:underline transition-colors"
+                            className="shrink-0 inline-flex items-center gap-1 text-foreground-faint/70 hover:text-foreground hover:underline transition-colors text-xs"
                           >
-                            Details
+                            <span>Details</span>
                           </Link>
+                          {nft.status !== "pending" && nft.status !== "scanning" && (
+                            <button
+                              type="button"
+                              className="shrink-0 inline-flex items-center gap-1 text-foreground-faint/70 hover:text-foreground hover:underline transition-colors text-xs"
+                              onClick={() => {
+                                // Cancel any ongoing run and rescan this NFT only
+                                cancelScan();
+                                setNfts((prev) => {
+                                  const next = [...prev];
+                                  const it = next[idx];
+                                  if (!it) return prev;
+                                  next[idx] = resetNftScan(it);
+                                  return next;
+                                });
+                                setTimeout(() => void scanOne(idx, { force: true }), 0);
+                              }}
+                            >
+                              <span>Rescan</span>
+                              <RefreshCw className="w-3 h-3" />
+                            </button>
+                          )}
                         </div>
                         
                         {(nft.error || nft.imageError) ? (
@@ -920,34 +936,59 @@ export default function ScannerPage() {
                           <div className="text-blue-500 animate-pulse">SCANNING</div>
                         ) : (
                           <div className="flex flex-wrap justify-end sm:flex-col sm:items-end gap-x-4 gap-y-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2" title="Metadata Status & Storage">
                               {nft.metadataStorage && (
-                                <span className={`text-xs ${storageColor(nft.metadataStorage)}`} title="Metadata storage">
-                                  {storageLabel(nft.metadataStorage)}
+                                <div className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border ${
+                                  nft.metadataStorage === "onchain" ? "bg-green-500/10 border-green-500/20 text-green-600" :
+                                  nft.metadataStorage === "ipfs" ? "bg-blue-500/10 border-blue-500/20 text-blue-600" :
+                                  nft.metadataStorage === "arweave" ? "bg-purple-500/10 border-purple-500/20 text-purple-600" :
+                                  "bg-yellow-500/10 border-yellow-500/20 text-yellow-600"
+                                }`}>
+                                  <StorageIcon type={nft.metadataStorage} />
+                                  <span className="uppercase text-[10px] font-bold">{nft.metadataStorage}</span>
                                   {nft.metadataStorage === "ipfs" && nft.metadataIpfsPinStatus && (
-                                    <span className="ml-1" title={ipfsPinTooltip(nft.metadataIpfsPinStatus)}>
-                                      {ipfsPinLabel(nft.metadataIpfsPinStatus)}
+                                    <span title={ipfsPinTooltip(nft.metadataIpfsPinStatus)} className={
+                                      nft.metadataIpfsPinStatus === "pinned" ? "text-green-600" :
+                                      nft.metadataIpfsPinStatus === "available" ? "text-blue-600" :
+                                      "text-red-500"
+                                    }>
+                                      <IpfsPinIcon status={nft.metadataIpfsPinStatus} />
                                     </span>
                                   )}
-                                </span>
+                                </div>
                               )}
-                              <span className={nft.metadataStatus === "ok" ? "text-green-600" : nft.isTransient ? "text-yellow-600" : "text-red-500 font-bold"}>
-                                META: {nft.metadataStatus === "ok" ? "OK" : nft.isTransient ? "?" : "ERR"}
+                              <span className={`text-xs font-bold ${
+                                nft.metadataStatus === "ok" ? "text-green-600" : nft.isTransient ? "text-yellow-600" : "text-red-500"
+                              }`}>
+                                META
                               </span>
                             </div>
-                            <div className="flex items-center gap-2">
+
+                            <div className="flex items-center gap-2" title="Image Status & Storage">
                               {nft.imageStorage && (
-                                <span className={`text-xs ${storageColor(nft.imageStorage)}`} title="Image storage">
-                                  {storageLabel(nft.imageStorage)}
+                                <div className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border ${
+                                  nft.imageStorage === "onchain" ? "bg-green-500/10 border-green-500/20 text-green-600" :
+                                  nft.imageStorage === "ipfs" ? "bg-blue-500/10 border-blue-500/20 text-blue-600" :
+                                  nft.imageStorage === "arweave" ? "bg-purple-500/10 border-purple-500/20 text-purple-600" :
+                                  "bg-yellow-500/10 border-yellow-500/20 text-yellow-600"
+                                }`}>
+                                  <StorageIcon type={nft.imageStorage} />
+                                  <span className="uppercase text-[10px] font-bold">{nft.imageStorage}</span>
                                   {nft.imageStorage === "ipfs" && nft.imageIpfsPinStatus && (
-                                    <span className="ml-1" title={ipfsPinTooltip(nft.imageIpfsPinStatus)}>
-                                      {ipfsPinLabel(nft.imageIpfsPinStatus)}
+                                    <span title={ipfsPinTooltip(nft.imageIpfsPinStatus)} className={
+                                      nft.imageIpfsPinStatus === "pinned" ? "text-green-600" :
+                                      nft.imageIpfsPinStatus === "available" ? "text-blue-600" :
+                                      "text-red-500"
+                                    }>
+                                      <IpfsPinIcon status={nft.imageIpfsPinStatus} />
                                     </span>
                                   )}
-                                </span>
+                                </div>
                               )}
-                              <span className={nft.imageStatus === "ok" ? "text-green-600" : nft.imageError ? "text-yellow-600" : "text-red-500 font-bold"}>
-                                IMG: {nft.imageStatus === "ok" ? "OK" : nft.imageError ? "?" : "ERR"}
+                              <span className={`text-xs font-bold ${
+                                nft.imageStatus === "ok" ? "text-green-600" : nft.imageError ? "text-yellow-600" : "text-red-500"
+                              }`}>
+                                IMG
                               </span>
                             </div>
                             {(nft.imageFormat || nft.imageSizeBytes) && (
@@ -960,24 +1001,6 @@ export default function ScannerPage() {
                                 )}
                               </div>
                             )}
-                            <button
-                              type="button"
-                              className="text-link hover:underline font-bold"
-                              onClick={() => {
-                                // Cancel any ongoing run and rescan this NFT only
-                                cancelScan();
-                                setNfts((prev) => {
-                                  const next = [...prev];
-                                  const it = next[idx];
-                                  if (!it) return prev;
-                                  next[idx] = resetNftScan(it);
-                                  return next;
-                                });
-                                setTimeout(() => void scanOne(idx, { force: true }), 0);
-                              }}
-                            >
-                              Rescan
-                            </button>
                           </div>
                         )}
                       </div>

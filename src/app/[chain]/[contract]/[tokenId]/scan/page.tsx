@@ -3,9 +3,9 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, ArrowUpRight, RefreshCw, Check, X, AlertTriangle, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, RefreshCw, Check, X, AlertTriangle, Loader2, Database, Box, HardDrive, Server, HelpCircle, Pin, CheckCircle2, AlertCircle } from "lucide-react";
 import { Section } from "@/components/Section";
-import { auditNft, fetchNftInfo, type NftInfo, type NftAuditResult } from "@/app/scanner/actions";
+import { auditNft, fetchNftInfo, type NftInfo } from "@/app/scanner/actions";
 import { normalizeChain, type SupportedChain } from "@/lib/nft/chain";
 import { use } from "react";
 
@@ -65,6 +65,25 @@ const chainDisplayName = (chain: string) => {
     case "scroll": return "Scroll";
     case "polygon-zkevm": return "Polygon zkEVM";
     default: return chain;
+  }
+};
+
+const StorageIcon = ({ type, className = "w-4 h-4" }: { type: StorageType | undefined; className?: string }) => {
+  switch (type) {
+    case "onchain": return <Database className={className} />;
+    case "ipfs": return <Box className={className} />;
+    case "arweave": return <HardDrive className={className} />;
+    case "centralized": return <Server className={className} />;
+    default: return <HelpCircle className={className} />;
+  }
+};
+
+const IpfsPinIcon = ({ status, className = "w-4 h-4" }: { status: IpfsPinStatus | undefined; className?: string }) => {
+  switch (status) {
+    case "pinned": return <Pin className={className} />;
+    case "available": return <CheckCircle2 className={className} />;
+    case "unavailable": return <AlertCircle className={className} />;
+    default: return null;
   }
 };
 
@@ -509,26 +528,28 @@ export default function TokenScanPage({
                   {result.metadataStorage && (
                     <div className={`p-3 rounded ${storageBgColor(result.metadataStorage)}`}>
                       <div className="flex items-center gap-2">
-                        <span className={`font-bold ${storageColor(result.metadataStorage)}`}>
+                        <span className={`font-bold flex items-center gap-1.5 ${storageColor(result.metadataStorage)}`}>
+                          <StorageIcon type={result.metadataStorage} />
                           {storageLabel(result.metadataStorage)}
                         </span>
                         {result.metadataStorage === "ipfs" && result.metadataIpfsPinStatus && (
-                          <span className={`text-xs px-2 py-0.5 rounded ${
+                          <span className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
                             result.metadataIpfsPinStatus === "pinned" 
                               ? "bg-green-500/20 text-green-500"
                               : result.metadataIpfsPinStatus === "available"
                               ? "bg-blue-500/20 text-blue-500"
                               : "bg-red-500/20 text-red-500"
                           }`}>
-                            {result.metadataIpfsPinStatus === "pinned" ? "📌 " : ""}{ipfsPinLabel(result.metadataIpfsPinStatus)}
+                            <IpfsPinIcon status={result.metadataIpfsPinStatus} className="w-3 h-3" />
+                            {ipfsPinLabel(result.metadataIpfsPinStatus)}
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-foreground-muted mt-1">
+                      <div className="text-xs text-foreground-muted mt-1 pl-6">
                         {storageDescription(result.metadataStorage)}
                       </div>
                       {result.metadataStorage === "ipfs" && result.metadataIpfsPinStatus && (
-                        <div className="text-xs text-foreground-faint mt-1">
+                        <div className="text-xs text-foreground-faint mt-1 pl-6">
                           {ipfsPinDescription(result.metadataIpfsPinStatus)}
                         </div>
                       )}
@@ -586,26 +607,28 @@ export default function TokenScanPage({
                   {result.imageStorage && (
                     <div className={`p-3 rounded ${storageBgColor(result.imageStorage)}`}>
                       <div className="flex items-center gap-2">
-                        <span className={`font-bold ${storageColor(result.imageStorage)}`}>
+                        <span className={`font-bold flex items-center gap-1.5 ${storageColor(result.imageStorage)}`}>
+                          <StorageIcon type={result.imageStorage} />
                           {storageLabel(result.imageStorage)}
                         </span>
                         {result.imageStorage === "ipfs" && result.imageIpfsPinStatus && (
-                          <span className={`text-xs px-2 py-0.5 rounded ${
+                          <span className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
                             result.imageIpfsPinStatus === "pinned" 
                               ? "bg-green-500/20 text-green-500"
                               : result.imageIpfsPinStatus === "available"
                               ? "bg-blue-500/20 text-blue-500"
                               : "bg-red-500/20 text-red-500"
                           }`}>
-                            {result.imageIpfsPinStatus === "pinned" ? "📌 " : ""}{ipfsPinLabel(result.imageIpfsPinStatus)}
+                            <IpfsPinIcon status={result.imageIpfsPinStatus} className="w-3 h-3" />
+                            {ipfsPinLabel(result.imageIpfsPinStatus)}
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-foreground-muted mt-1">
+                      <div className="text-xs text-foreground-muted mt-1 pl-6">
                         {storageDescription(result.imageStorage)}
                       </div>
                       {result.imageStorage === "ipfs" && result.imageIpfsPinStatus && (
-                        <div className="text-xs text-foreground-faint mt-1">
+                        <div className="text-xs text-foreground-faint mt-1 pl-6">
                           {ipfsPinDescription(result.imageIpfsPinStatus)}
                         </div>
                       )}
