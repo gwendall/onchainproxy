@@ -7,7 +7,8 @@ import { isAddress } from "viem";
 import { Drawer } from "vaul";
 import { Section } from "@/components/Section";
 import { scanNfts, checkNftStatus } from "./actions";
-import { ArrowLeft, ArrowUpRight, Database, Box, HardDrive, Server, HelpCircle, Pin, CheckCircle2, AlertCircle, RefreshCw, X, Check, AlertTriangle, Loader2, ImageOff, LayoutGrid, List, Play, Square, Share2, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Database, Box, HardDrive, Server, HelpCircle, Pin, CheckCircle2, AlertCircle, RefreshCw, X, Check, AlertTriangle, Loader2, ImageOff, LayoutGrid, List, Play, Square, Share2, Trash2, Download } from "lucide-react";
+import { ShareSheetDrawer } from "react-sharesheet";
 import { toPng } from "html-to-image";
 import QRCode from "qrcode";
 import { SUPPORTED_CHAINS, chainLabel, type SupportedChain } from "@/lib/nft/chain";
@@ -319,6 +320,8 @@ export default function ScannerPage() {
   const [showErrorsOnly, setShowErrorsOnly] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [shareDrawerOpen, setShareDrawerOpen] = useState(false);
+  const [shareImageBlob, setShareImageBlob] = useState<Blob | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     if (typeof window === "undefined") return "list";
     const saved = window.localStorage.getItem("onchainproxy:scanner:viewMode");
@@ -763,8 +766,8 @@ export default function ScannerPage() {
     });
   }, [nfts]);
 
-  // Share/download report as image
-  const shareReport = useCallback(async () => {
+  // Generate share image and open share drawer
+  const openShareDrawer = useCallback(async () => {
     if (!shareCardRef.current || isGeneratingShare) return;
     
     setIsGeneratingShare(true);
@@ -779,35 +782,52 @@ export default function ScannerPage() {
       // Convert to blob
       const response = await fetch(dataUrl);
       const blob = await response.blob();
-      const file = new File([blob], "onchain-scanner-report.png", { type: "image/png" });
-      
-      // Try native share first
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({
-          title: "OnChain Scanner Report",
-          text: `Check out my wallet's onchain asset health report!`,
-          url: "https://onchainproxy.io/scanner",
-          files: [file],
-        });
-      } else {
-        // Fallback: download the image
-        const link = document.createElement("a");
-        link.href = dataUrl;
-        link.download = "onchain-scanner-report.png";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
+      setShareImageBlob(blob);
+      setShareDrawerOpen(true);
     } catch (error) {
-      // User cancelled share - this is normal behavior
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
-      console.error("Share failed:", error instanceof Error ? error.message : error);
+      console.error("Failed to generate share image:", error instanceof Error ? error.message : error);
     } finally {
       setIsGeneratingShare(false);
     }
   }, [isGeneratingShare]);
+
+  // Download report as image
+  const downloadReport = useCallback(async () => {
+    if (!shareCardRef.current) return;
+    
+    try {
+      const dataUrl = await toPng(shareCardRef.current, {
+        quality: 1,
+        pixelRatio: 2,
+        backgroundColor: "#0a0a0a",
+      });
+      
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = "onchain-scanner-report.png";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Download failed:", error instanceof Error ? error.message : error);
+    }
+  }, []);
+
+  // Get share URL with wallet param
+  const shareUrl = useMemo(() => {
+    const baseUrl = "https://onchainproxy.io/scanner";
+    if (!submittedTarget) return baseUrl;
+    return `${baseUrl}?w=${encodeURIComponent(submittedTarget)}`;
+  }, [submittedTarget]);
+
+  // Get share text
+  const shareText = useMemo(() => {
+    const healthScore = stats.scanned > 0 ? 100 - stats.brokenAssetsPct : null;
+    if (healthScore === null) return "Check out my wallet's onchain asset health report!";
+    if (healthScore === 100) return `My wallet has a 100% health score! All ${stats.scanned} NFTs are accessible on-chain.`;
+    if (healthScore >= 90) return `My wallet health score is ${healthScore}% - most of my ${stats.scanned} NFTs are healthy!`;
+    return `Checked my wallet's NFT health: ${healthScore}% healthy out of ${stats.scanned} assets. Some need attention!`;
+  }, [stats.scanned, stats.brokenAssetsPct]);
 
   // Auto-start scan when NFTs are loaded and needsAutoScanRef is set
   useEffect(() => {
@@ -1334,14 +1354,14 @@ export default function ScannerPage() {
                     </div>
                   )}
                   
-                  {/* Share Button */}
+                  {/* Share & Download Buttons */}
                   {stats.scanned === stats.total && stats.total > 0 && (
-                    <div className="pt-4 border-t border-foreground-faint/10">
+                    <div className="pt-4 border-t border-foreground-faint/10 flex gap-2">
                       <button
                         type="button"
-                        onClick={shareReport}
+                        onClick={openShareDrawer}
                         disabled={isGeneratingShare}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg bg-foreground text-background hover:bg-foreground/90 transition-colors disabled:opacity-50"
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg bg-foreground text-background hover:bg-foreground/90 transition-colors disabled:opacity-50"
                       >
                         {isGeneratingShare ? (
                           <>
@@ -1351,9 +1371,17 @@ export default function ScannerPage() {
                         ) : (
                           <>
                             <Share2 className="w-4 h-4" />
-                            Share Report
+                            Share
                           </>
                         )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={downloadReport}
+                        className="flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors"
+                        title="Download as image"
+                      >
+                        <Download className="w-4 h-4" />
                       </button>
                     </div>
                   )}
@@ -1877,6 +1905,20 @@ export default function ScannerPage() {
           </Drawer.Content>
         </Drawer.Portal>
       </Drawer.Root>
+
+      {/* Share Drawer */}
+      <ShareSheetDrawer
+        open={shareDrawerOpen}
+        onOpenChange={setShareDrawerOpen}
+        url={shareUrl}
+        title="OnChain Scanner Report"
+        text={shareText}
+        preview={shareImageBlob ? {
+          type: "image",
+          url: URL.createObjectURL(shareImageBlob),
+        } : undefined}
+        platforms={["native", "x", "farcaster", "telegram", "whatsapp", "copy"]}
+      />
       
       {/* Hidden Share Card for Image Generation */}
       <div className="fixed -left-[9999px] -top-[9999px]">

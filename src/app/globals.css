@@ -92,3 +92,27 @@ html { font-size: 16px; }
 .animate-gradient-x {
   animation: gradient-x 2s ease infinite;
 }
+
+/* ShareSheet theming */
+:root {
+  --sharesheet-bg: var(--background);
+  --sharesheet-text: var(--foreground);
+  --sharesheet-text-muted: var(--foreground-muted);
+  --sharesheet-border: rgba(0, 0, 0, 0.1);
+  --sharesheet-overlay: rgba(0, 0, 0, 0.4);
+  --sharesheet-button-bg: rgba(0, 0, 0, 0.05);
+  --sharesheet-button-hover: rgba(0, 0, 0, 0.1);
+  --sharesheet-handle: rgba(0, 0, 0, 0.2);
+  --sharesheet-preview-bg: rgba(0, 0, 0, 0.03);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sharesheet-border: rgba(255, 255, 255, 0.1);
+    --sharesheet-overlay: rgba(0, 0, 0, 0.6);
+    --sharesheet-button-bg: rgba(255, 255, 255, 0.08);
+    --sharesheet-button-hover: rgba(255, 255, 255, 0.15);
+    --sharesheet-handle: rgba(255, 255, 255, 0.3);
+    --sharesheet-preview-bg: rgba(255, 255, 255, 0.05);
+  }
+}
