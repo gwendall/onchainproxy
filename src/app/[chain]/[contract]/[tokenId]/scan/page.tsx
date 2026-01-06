@@ -5,11 +5,14 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, ArrowUpRight, RefreshCw, Check, X, AlertTriangle, Loader2 } from "lucide-react";
 import { Section } from "@/components/Section";
-import { checkNftStatus, fetchNftInfo, type NftInfo } from "@/app/scanner/actions";
+import { auditNft, fetchNftInfo, type NftInfo, type NftAuditResult } from "@/app/scanner/actions";
 import { normalizeChain, type SupportedChain } from "@/lib/nft/chain";
 import { use } from "react";
 
 type ErrorSource = "rpc" | "contract" | "metadata_fetch" | "parsing" | "image_fetch" | "unknown";
+type StorageType = "onchain" | "ipfs" | "arweave" | "centralized" | "unknown";
+type IpfsPinStatus = "pinned" | "available" | "unavailable" | "unknown";
+type ImageFormat = "png" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "avif" | "unknown";
 
 type ScanResult = {
   status: "idle" | "scanning" | "done";
@@ -20,6 +23,17 @@ type ScanResult = {
   isTransient?: boolean;
   imageError?: string;
   scannedAt?: number;
+  // Audit data
+  metadataUri?: string;
+  metadataUrl?: string;
+  metadataStorage?: StorageType;
+  metadataIpfsPinStatus?: IpfsPinStatus;
+  imageUri?: string;
+  imageUrl?: string;
+  imageStorage?: StorageType;
+  imageIpfsPinStatus?: IpfsPinStatus;
+  imageFormat?: ImageFormat;
+  imageSizeBytes?: number;
 };
 
 const shortAddress = (addr: string) => {
@@ -76,6 +90,70 @@ const StatusIcon = ({ status, isTransient }: { status: "ok" | "error" | "unknown
   );
 };
 
+const storageLabel = (type: StorageType | undefined): string => {
+  switch (type) {
+    case "onchain": return "On-chain";
+    case "ipfs": return "IPFS";
+    case "arweave": return "Arweave";
+    case "centralized": return "Centralized";
+    default: return "Unknown";
+  }
+};
+
+const storageColor = (type: StorageType | undefined): string => {
+  switch (type) {
+    case "onchain": return "text-green-500";
+    case "ipfs": return "text-blue-500";
+    case "arweave": return "text-purple-500";
+    case "centralized": return "text-yellow-600";
+    default: return "text-foreground-faint";
+  }
+};
+
+const storageBgColor = (type: StorageType | undefined): string => {
+  switch (type) {
+    case "onchain": return "bg-green-500/10";
+    case "ipfs": return "bg-blue-500/10";
+    case "arweave": return "bg-purple-500/10";
+    case "centralized": return "bg-yellow-500/10";
+    default: return "bg-foreground-faint/10";
+  }
+};
+
+const storageDescription = (type: StorageType | undefined): string => {
+  switch (type) {
+    case "onchain": return "Stored directly in the smart contract. Permanent and immutable.";
+    case "ipfs": return "Stored on IPFS, a decentralized file system. Depends on pinning.";
+    case "arweave": return "Stored on Arweave, a permanent decentralized storage network.";
+    case "centralized": return "Stored on a centralized server. May become unavailable.";
+    default: return "Storage location unknown.";
+  }
+};
+
+const ipfsPinLabel = (status: IpfsPinStatus | undefined): string => {
+  switch (status) {
+    case "pinned": return "Pinned";
+    case "available": return "Available";
+    case "unavailable": return "Unavailable";
+    default: return "";
+  }
+};
+
+const ipfsPinDescription = (status: IpfsPinStatus | undefined): string => {
+  switch (status) {
+    case "pinned": return "Served by a known pinning service. Content should remain available.";
+    case "available": return "Accessible on IPFS gateways but may not be pinned. Could disappear.";
+    case "unavailable": return "Not accessible on checked gateways. May be unpinned and at risk.";
+    default: return "";
+  }
+};
+
+const formatBytes = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 export default function TokenScanPage({
   params,
 }: {
@@ -97,16 +175,41 @@ export default function TokenScanPage({
     setResult({ status: "scanning" });
     
     try {
-      const status = await checkNftStatus(chain, contract, tokenId);
+      const audit = await auditNft(chain, contract, tokenId);
+      
+      if (!audit.ok) {
+        setResult({
+          status: "done",
+          metadataOk: false,
+          imageOk: false,
+          error: audit.error,
+          errorSource: audit.errorSource,
+          isTransient: audit.isTransient,
+          scannedAt: Date.now(),
+        });
+        return;
+      }
+      
       setResult({
         status: "done",
-        metadataOk: status.metadataOk,
-        imageOk: status.imageOk,
-        error: status.error,
-        errorSource: status.errorSource,
-        isTransient: status.isTransient,
-        imageError: status.imageError,
+        metadataOk: audit.metadata?.ok ?? false,
+        imageOk: audit.image?.ok ?? true,
+        error: audit.error,
+        errorSource: audit.errorSource,
+        isTransient: audit.isTransient,
+        imageError: audit.image?.error,
         scannedAt: Date.now(),
+        // Audit data
+        metadataUri: audit.metadata?.uri,
+        metadataUrl: audit.metadata?.url,
+        metadataStorage: audit.metadata?.storageType,
+        metadataIpfsPinStatus: audit.metadata?.ipfsPinStatus,
+        imageUri: audit.image?.uri,
+        imageUrl: audit.image?.url,
+        imageStorage: audit.image?.storageType,
+        imageIpfsPinStatus: audit.image?.ipfsPinStatus,
+        imageFormat: audit.image?.format,
+        imageSizeBytes: audit.image?.sizeBytes,
       });
     } catch (e) {
       setResult({
@@ -378,7 +481,7 @@ export default function TokenScanPage({
               {/* Detailed Results */}
               <div className="grid sm:grid-cols-2 gap-4">
                 {/* Metadata Status */}
-                <div className="p-4 rounded-lg bg-foreground-faint/5 border border-foreground-faint/10">
+                <div className="p-4 rounded-lg bg-foreground-faint/5 border border-foreground-faint/10 space-y-4">
                   <div className="flex items-center gap-3">
                     <StatusIcon 
                       status={result.metadataOk ? "ok" : "error"} 
@@ -401,8 +504,51 @@ export default function TokenScanPage({
                       </div>
                     </div>
                   </div>
+                  
+                  {/* Storage Info */}
+                  {result.metadataStorage && (
+                    <div className={`p-3 rounded ${storageBgColor(result.metadataStorage)}`}>
+                      <div className="flex items-center gap-2">
+                        <span className={`font-bold ${storageColor(result.metadataStorage)}`}>
+                          {storageLabel(result.metadataStorage)}
+                        </span>
+                        {result.metadataStorage === "ipfs" && result.metadataIpfsPinStatus && (
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            result.metadataIpfsPinStatus === "pinned" 
+                              ? "bg-green-500/20 text-green-500"
+                              : result.metadataIpfsPinStatus === "available"
+                              ? "bg-blue-500/20 text-blue-500"
+                              : "bg-red-500/20 text-red-500"
+                          }`}>
+                            {result.metadataIpfsPinStatus === "pinned" ? "📌 " : ""}{ipfsPinLabel(result.metadataIpfsPinStatus)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-foreground-muted mt-1">
+                        {storageDescription(result.metadataStorage)}
+                      </div>
+                      {result.metadataStorage === "ipfs" && result.metadataIpfsPinStatus && (
+                        <div className="text-xs text-foreground-faint mt-1">
+                          {ipfsPinDescription(result.metadataIpfsPinStatus)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Metadata URI */}
+                  {result.metadataUri && (
+                    <div className="text-xs space-y-1">
+                      <div className="text-foreground-faint">URI</div>
+                      <div className="text-foreground-muted break-all font-mono bg-foreground-faint/10 p-2 rounded max-h-20 overflow-auto">
+                        {result.metadataUri.length > 200 
+                          ? `${result.metadataUri.slice(0, 200)}...` 
+                          : result.metadataUri}
+                      </div>
+                    </div>
+                  )}
+                  
                   {result.error && !result.metadataOk && (
-                    <div className="mt-3 text-sm text-foreground-muted bg-foreground-faint/10 p-2 rounded">
+                    <div className="text-sm text-foreground-muted bg-red-500/10 p-2 rounded">
                       {result.errorSource && <span className="text-foreground-faint">[{result.errorSource}] </span>}
                       {result.error}
                     </div>
@@ -410,7 +556,7 @@ export default function TokenScanPage({
                 </div>
 
                 {/* Image Status */}
-                <div className="p-4 rounded-lg bg-foreground-faint/5 border border-foreground-faint/10">
+                <div className="p-4 rounded-lg bg-foreground-faint/5 border border-foreground-faint/10 space-y-4">
                   <div className="flex items-center gap-3">
                     <StatusIcon 
                       status={result.imageOk ? "ok" : "error"} 
@@ -435,8 +581,69 @@ export default function TokenScanPage({
                       </div>
                     </div>
                   </div>
+                  
+                  {/* Storage Info */}
+                  {result.imageStorage && (
+                    <div className={`p-3 rounded ${storageBgColor(result.imageStorage)}`}>
+                      <div className="flex items-center gap-2">
+                        <span className={`font-bold ${storageColor(result.imageStorage)}`}>
+                          {storageLabel(result.imageStorage)}
+                        </span>
+                        {result.imageStorage === "ipfs" && result.imageIpfsPinStatus && (
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            result.imageIpfsPinStatus === "pinned" 
+                              ? "bg-green-500/20 text-green-500"
+                              : result.imageIpfsPinStatus === "available"
+                              ? "bg-blue-500/20 text-blue-500"
+                              : "bg-red-500/20 text-red-500"
+                          }`}>
+                            {result.imageIpfsPinStatus === "pinned" ? "📌 " : ""}{ipfsPinLabel(result.imageIpfsPinStatus)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-foreground-muted mt-1">
+                        {storageDescription(result.imageStorage)}
+                      </div>
+                      {result.imageStorage === "ipfs" && result.imageIpfsPinStatus && (
+                        <div className="text-xs text-foreground-faint mt-1">
+                          {ipfsPinDescription(result.imageIpfsPinStatus)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Image Details */}
+                  {(result.imageFormat || result.imageSizeBytes) && (
+                    <div className="flex flex-wrap gap-4 text-sm">
+                      {result.imageFormat && result.imageFormat !== "unknown" && (
+                        <div>
+                          <span className="text-foreground-faint">Format: </span>
+                          <span className="text-foreground font-mono uppercase">{result.imageFormat}</span>
+                        </div>
+                      )}
+                      {result.imageSizeBytes && (
+                        <div>
+                          <span className="text-foreground-faint">Size: </span>
+                          <span className="text-foreground">{formatBytes(result.imageSizeBytes)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Image URI */}
+                  {result.imageUri && (
+                    <div className="text-xs space-y-1">
+                      <div className="text-foreground-faint">URI</div>
+                      <div className="text-foreground-muted break-all font-mono bg-foreground-faint/10 p-2 rounded max-h-20 overflow-auto">
+                        {result.imageUri.length > 200 
+                          ? `${result.imageUri.slice(0, 200)}...` 
+                          : result.imageUri}
+                      </div>
+                    </div>
+                  )}
+                  
                   {result.imageError && (
-                    <div className="mt-3 text-sm text-foreground-muted bg-foreground-faint/10 p-2 rounded">
+                    <div className="text-sm text-foreground-muted bg-yellow-500/10 p-2 rounded">
                       {result.imageError}
                     </div>
                   )}
