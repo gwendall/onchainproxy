@@ -290,6 +290,12 @@ export default function Home() {
         <Section title="Config (env)">
           <ul className="list-disc pl-5 space-y-1 text-foreground-muted">
             <li>
+              <span className="text-foreground">ALCHEMY_API_KEY</span>:{" "}
+              <span className="text-foreground-faint">(optional helper)</span> your Alchemy API key - if set, automatically
+              generates RPC URLs for all supported chains ({SUPPORTED_CHAINS.join(", ")}). This is a convenience shortcut;
+              you can always use the per-chain env vars instead.
+            </li>
+            <li>
               <span className="text-foreground">ONCHAIN_RPC_URLS</span> /{" "}
               <span className="text-foreground">ONCHAIN_RPC_URL</span>: global RPC fallback (optional)
             </li>
@@ -307,6 +313,19 @@ export default function Home() {
               <span className="text-foreground">http://localhost:3000</span>)
             </li>
           </ul>
+          <p className="text-foreground-faint mt-3">
+            No env vars are required - the app works out of the box with public RPCs.
+          </p>
+          <div className="mt-3">
+            <div className="text-foreground">RPC priority order:</div>
+            <ol className="list-decimal pl-5 space-y-1 text-foreground-muted mt-1">
+              <li>Query param <span className="text-foreground">?rpcUrl=...</span> (highest priority)</li>
+              <li>Chain-specific env: <span className="text-foreground">ONCHAIN_RPC_URLS_ETH</span>, etc.</li>
+              <li>Alchemy (if <span className="text-foreground">ALCHEMY_API_KEY</span> is set)</li>
+              <li>Global env: <span className="text-foreground">ONCHAIN_RPC_URLS</span> / <span className="text-foreground">ONCHAIN_RPC_URL</span></li>
+              <li>Default public RPCs (fallback)</li>
+            </ol>
+          </div>
         </Section>
 
       </div>
