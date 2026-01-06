@@ -83,22 +83,61 @@ const resolveEnsToAddress = async (ensName: string) => {
   return checksum;
 };
 
-export async function scanNfts(addressOrEns: string, chain: SupportedChain) {
+type ScanNftsResult = {
+  nfts: Array<{
+    contract: { address: string };
+    tokenId: string;
+    title?: string;
+    collection?: string;
+    thumbnailUrl?: string;
+  }>;
+  resolvedAddress: string;
+  resolvedTarget: string;
+  error?: undefined;
+} | {
+  nfts: [];
+  resolvedAddress: string;
+  resolvedTarget: string;
+  error: string;
+};
+
+export async function scanNfts(addressOrEns: string, chain: SupportedChain): Promise<ScanNftsResult> {
+  const raw = String(addressOrEns || "").trim();
+  
+  // Resolve address first
+  let resolvedAddress: string;
+  let resolvedTarget: string;
+  
+  try {
+    if (isAddress(raw)) {
+      const checksum = getAddress(raw);
+      resolvedAddress = checksum;
+      resolvedTarget = checksum;
+    } else if (looksLikeEnsName(raw)) {
+      const checksum = await resolveEnsToAddress(raw);
+      resolvedAddress = checksum;
+      resolvedTarget = raw;
+    } else {
+      return {
+        nfts: [],
+        resolvedAddress: "",
+        resolvedTarget: raw,
+        error: `Invalid address or ENS name: ${addressOrEns}`,
+      };
+    }
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Failed to resolve address";
+    console.error("Address resolution error:", e);
+    return {
+      nfts: [],
+      resolvedAddress: "",
+      resolvedTarget: raw,
+      error: message,
+    };
+  }
+  
   try {
     const alchemy = getAlchemy(chain);
-    const raw = String(addressOrEns || "").trim();
-
-    const { resolvedAddress, resolvedTarget } = await (async () => {
-      if (isAddress(raw)) {
-        const checksum = getAddress(raw);
-        return { resolvedAddress: checksum, resolvedTarget: checksum };
-      }
-      if (looksLikeEnsName(raw)) {
-        const checksum = await resolveEnsToAddress(raw);
-        return { resolvedAddress: checksum, resolvedTarget: raw };
-      }
-      throw new Error(`Invalid address or ENS name: ${addressOrEns}`);
-    })();
 
     // Fetch NFTs (paginate: pageSize max is 100)
     // Chain selected via Alchemy network config above.
@@ -156,7 +195,13 @@ export async function scanNfts(addressOrEns: string, chain: SupportedChain) {
     };
   } catch (e: unknown) {
     console.error("Scan error details:", e);
-    throw new Error(e instanceof Error ? e.message : "Failed to scan NFTs");
+    const message = e instanceof Error ? e.message : "Failed to scan NFTs";
+    return {
+      nfts: [],
+      resolvedAddress,
+      resolvedTarget,
+      error: message,
+    };
   }
 }
 

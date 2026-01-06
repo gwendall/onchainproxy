@@ -101,7 +101,6 @@ export default function ScannerPage() {
   const [scanEndedAt, setScanEndedAt] = useState<number | null>(null);
   const cancelRef = useRef(false);
   const runIdRef = useRef(0);
-  const autoScanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const needsAutoScanRef = useRef(false);
   const nftsRef = useRef(nfts);
   const didRestoreRef = useRef(false);
@@ -363,45 +362,49 @@ export default function ScannerPage() {
     }
   }, []);
 
+  const [scanError, setScanError] = useState<string | null>(null);
+
   const fetchAndScan = useCallback(async (target: string, chain: SupportedChain) => {
     setLoading(true);
     setNfts([]);
+    setScanError(null);
     setSubmittedTarget(target);
     setSubmittedAddress("");
     setSubmittedChain(chain);
     setScanStartedAt(Date.now());
     setScanEndedAt(null);
 
-    try {
-      const result = await scanNfts(target, chain);
-      if (result?.resolvedTarget) {
-        setSubmittedTarget(result.resolvedTarget);
-        setInput(result.resolvedTarget);
-      }
-      if (result?.resolvedAddress) {
-        setSubmittedAddress(result.resolvedAddress);
-      }
-
-      const items: NftItem[] = result.nfts.map((n) => ({
-        contract: n.contract?.address ?? "",
-        tokenId: n.tokenId,
-        chain,
-        title: n.title || `#${n.tokenId}`,
-        collection: n.collection,
-        thumbnailUrl: n.thumbnailUrl,
-        status: "pending" as const,
-      }));
-
-      // Mark that we need to auto-scan after state updates
-      needsAutoScanRef.current = items.length > 0;
-      
-      setNfts(items);
+    const result = await scanNfts(target, chain);
+    
+    if (result.error) {
+      setScanError(result.error);
       setLoading(false);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      alert("Error fetching NFTs: " + message);
-      setLoading(false);
+      return;
     }
+    
+    if (result.resolvedTarget) {
+      setSubmittedTarget(result.resolvedTarget);
+      setInput(result.resolvedTarget);
+    }
+    if (result.resolvedAddress) {
+      setSubmittedAddress(result.resolvedAddress);
+    }
+
+    const items: NftItem[] = result.nfts.map((n) => ({
+      contract: n.contract?.address ?? "",
+      tokenId: n.tokenId,
+      chain,
+      title: n.title || `#${n.tokenId}`,
+      collection: n.collection,
+      thumbnailUrl: n.thumbnailUrl,
+      status: "pending" as const,
+    }));
+
+    // Mark that we need to auto-scan after state updates
+    needsAutoScanRef.current = items.length > 0;
+    
+    setNfts(items);
+    setLoading(false);
   }, []);
 
   const handleScan = async (e: React.FormEvent) => {
@@ -421,27 +424,6 @@ export default function ScannerPage() {
   const isChainSupportedForWallet = alchemyWalletChains.includes(selectedChain);
   const canSubmit = isChainSupportedForWallet && isValidTarget(inputTrimmed) && !(loading && nfts.length === 0);
 
-  // Auto-start scan when a new valid address is entered (debounced)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (autoScanTimerRef.current) clearTimeout(autoScanTimerRef.current);
-
-    const next = inputTrimmed;
-    if (!isValidTarget(next)) return;
-    if (next.toLowerCase() === submittedTarget.toLowerCase() && selectedChain === submittedChain) return;
-    if (loading || isScanning || !isChainSupportedForWallet) return;
-
-    autoScanTimerRef.current = setTimeout(() => {
-      if (!restoreSession(next, selectedChain)) {
-        void fetchAndScan(next, selectedChain);
-      }
-      // Auto-scan will be triggered by the effect when NFTs are loaded
-    }, 400);
-
-    return () => {
-      if (autoScanTimerRef.current) clearTimeout(autoScanTimerRef.current);
-    };
-  }, [inputTrimmed, submittedTarget, loading, isScanning, selectedChain, isChainSupportedForWallet, submittedChain, restoreSession, fetchAndScan]);
 
   return (
     <main className="min-h-screen max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 font-mono">
@@ -473,7 +455,10 @@ export default function ScannerPage() {
             <input
               type="text"
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                if (scanError) setScanError(null);
+              }}
               placeholder="0x... or vitalik.eth"
               spellCheck={false}
               autoCapitalize="none"
@@ -496,6 +481,11 @@ export default function ScannerPage() {
           {inputTrimmed.length > 0 && !isValidTarget(inputTrimmed) ? (
             <div className="mt-2 text-foreground-faint">
               Please enter a valid Ethereum address (0x + 40 hex chars) or an ENS name (e.g. vitalik.eth).
+            </div>
+          ) : null}
+          {scanError ? (
+            <div className="mt-2 text-red-500">
+              {scanError}
             </div>
           ) : null}
           {submittedAddress && nfts.length > 0 ? (
