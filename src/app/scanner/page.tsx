@@ -868,7 +868,7 @@ export default function ScannerPage() {
   const inputTrimmed = input.trim();
   const alchemyWalletChains: SupportedChain[] = ["eth", "arb", "op", "base", "polygon"];
   const isChainSupportedForWallet = alchemyWalletChains.includes(selectedChain);
-  const canSubmit = isChainSupportedForWallet && isValidTarget(inputTrimmed) && !(loading && nfts.length === 0);
+  const canSubmit = isChainSupportedForWallet && isValidTarget(inputTrimmed) && !loading && !isScanning;
 
 
   return (
@@ -926,9 +926,21 @@ export default function ScannerPage() {
             <button
               type="submit"
               disabled={!canSubmit}
-              className="w-full sm:w-auto px-6 py-2.5 bg-foreground text-background font-bold rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
+              className="w-full sm:w-auto px-6 py-2.5 bg-foreground text-background font-bold rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity inline-flex items-center justify-center gap-2"
             >
-              {loading && nfts.length === 0 ? "Fetching..." : "Scan"}
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Fetching...
+                </>
+              ) : isScanning ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Scanning...
+                </>
+              ) : (
+                "Scan"
+              )}
             </button>
           </form>
           {!isChainSupportedForWallet ? (
@@ -964,7 +976,7 @@ export default function ScannerPage() {
                       className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
                     >
                       <Square className="w-3.5 h-3.5" />
-                      Stop
+                      Cancel
                     </button>
                   ) : hasPending ? (
                     <button 
@@ -975,16 +987,16 @@ export default function ScannerPage() {
                       <Play className="w-3.5 h-3.5" />
                       Continue
                     </button>
+                  ) : stats.scanned === stats.total && stats.total > 0 ? (
+                    <button
+                      type="button"
+                      onClick={rescanWallet}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-foreground/10 text-foreground hover:bg-foreground/15 transition-colors"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Rescan
+                    </button>
                   ) : null}
-                  <button
-                    type="button"
-                    onClick={rescanWallet}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-foreground/10 text-foreground-muted hover:bg-foreground/15 hover:text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                    disabled={isScanning || nfts.length === 0}
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    Rescan
-                  </button>
                 </div>
 
                 <div className="flex items-center gap-4 text-foreground-muted">
