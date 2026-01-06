@@ -43,6 +43,7 @@ export const resolveNftMetadata = async (params: {
   tokenId: string;
   rpcUrlQuery: string | null;
   cacheTtlMs: number;
+  skipCache?: boolean;
 }): Promise<NftMetadataResult> => {
   if (!ethers.utils.isAddress(params.contract)) {
     throw new Error("Invalid contract");
@@ -56,8 +57,10 @@ export const resolveNftMetadata = async (params: {
 
   const nowMs = Date.now();
   const cacheKey = `${params.chain}:${params.contract}:${tokenIdBn.toString()}`;
-  const cached = metadataCache.get(cacheKey, nowMs);
-  if (cached) return cached;
+  if (!params.skipCache) {
+    const cached = metadataCache.get(cacheKey, nowMs);
+    if (cached) return cached;
+  }
 
   const { metadataUri } = await resolveTokenMetadataUri({
     chain: params.chain,

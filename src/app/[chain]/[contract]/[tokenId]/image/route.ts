@@ -104,6 +104,7 @@ export const GET = async (
     // Use raw=1 to get the original SVG, or svg=1 to force passthrough SVG without redirect.
     const svg = search.get("svg");
     const forceSvg = svg === "1";
+    const refresh = search.get("refresh") === "1";
     const allowSvgRasterize = !wantOriginal && !forceSvg;
     const punksBg = (chain === "eth" && isCryptoPunksContract(contract) && allowSvgRasterize) ? "#638696" : undefined;
 
@@ -120,6 +121,7 @@ export const GET = async (
       tokenId,
       rpcUrlQuery: rpcUrl,
       cacheTtlMs: lruTtlMs,
+      skipCache: refresh,
     });
 
     const imageUrl = meta.imageUrl;
@@ -132,7 +134,7 @@ export const GET = async (
       // Redirect when possible, but for data: URLs return the bytes directly.
       if (!imageUrl.startsWith("data:")) {
         const resp = NextResponse.redirect(imageUrl, 302);
-        setCacheControl(resp.headers, cacheSeconds);
+        setCacheControl(resp.headers, cacheSeconds, refresh);
         return resp;
       }
     }
@@ -155,31 +157,31 @@ export const GET = async (
       // If sharp isn't available or content-type is excluded (svg/gif/etc), just passthrough.
       if (!transformed || wantOriginal) {
         const etag = computeWeakEtag(decoded.body);
-        if (maybeNotModified(request, etag)) {
+        if (!refresh && maybeNotModified(request, etag)) {
           const headers = new Headers();
           headers.set("ETag", etag);
-          setCacheControl(headers, cacheSeconds);
+          setCacheControl(headers, cacheSeconds, refresh);
           return new Response(null, { status: 304, headers });
         }
         const headers = new Headers();
         headers.set("Content-Type", decoded.mime);
         headers.set("ETag", etag);
-        setCacheControl(headers, cacheSeconds);
+        setCacheControl(headers, cacheSeconds, refresh);
         setInlineFilename(headers, filenameBase, tokenId, decoded.mime);
         return new Response(new Uint8Array(decoded.body), { status: 200, headers });
       }
 
       const etag = computeWeakEtag(transformed);
-      if (maybeNotModified(request, etag)) {
+      if (!refresh && maybeNotModified(request, etag)) {
         const headers = new Headers();
         headers.set("ETag", etag);
-        setCacheControl(headers, cacheSeconds);
+        setCacheControl(headers, cacheSeconds, refresh);
         return new Response(null, { status: 304, headers });
       }
       const headers = new Headers();
       headers.set("Content-Type", "image/webp");
       headers.set("ETag", etag);
-      setCacheControl(headers, cacheSeconds);
+      setCacheControl(headers, cacheSeconds, refresh);
       setInlineFilename(headers, filenameBase, tokenId, "image/webp");
       return new Response(new Uint8Array(transformed), { status: 200, headers });
     }
@@ -187,6 +189,7 @@ export const GET = async (
     const fetched = await fetchImageBuffer({
       url: imageUrl,
       cacheTtlMs: lruTtlMs,
+      skipCache: refresh,
     });
 
     const transformed = await maybeResizeToWebp({
@@ -202,33 +205,33 @@ export const GET = async (
 
     if (!transformed) {
       const etag = computeWeakEtag(fetched.body);
-      if (maybeNotModified(request, etag)) {
+      if (!refresh && maybeNotModified(request, etag)) {
         const headers = new Headers();
         headers.set("ETag", etag);
-        setCacheControl(headers, cacheSeconds);
+        setCacheControl(headers, cacheSeconds, refresh);
         return new Response(null, { status: 304, headers });
       }
 
       const headers = new Headers();
       if (fetched.contentType) headers.set("Content-Type", fetched.contentType);
       headers.set("ETag", etag);
-      setCacheControl(headers, cacheSeconds);
+      setCacheControl(headers, cacheSeconds, refresh);
       setInlineFilename(headers, filenameBase, tokenId, fetched.contentType);
       return new Response(new Uint8Array(fetched.body), { status: 200, headers });
     }
 
     const etag = computeWeakEtag(transformed);
-    if (maybeNotModified(request, etag)) {
+    if (!refresh && maybeNotModified(request, etag)) {
       const headers = new Headers();
       headers.set("ETag", etag);
-      setCacheControl(headers, cacheSeconds);
+      setCacheControl(headers, cacheSeconds, refresh);
       return new Response(null, { status: 304, headers });
     }
 
     const headers = new Headers();
     headers.set("Content-Type", "image/webp");
     headers.set("ETag", etag);
-    setCacheControl(headers, cacheSeconds);
+    setCacheControl(headers, cacheSeconds, refresh);
     setInlineFilename(headers, filenameBase, tokenId, "image/webp");
     return new Response(new Uint8Array(transformed), { status: 200, headers });
   } catch (e) {

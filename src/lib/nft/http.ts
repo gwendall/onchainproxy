@@ -1,4 +1,9 @@
-export const setCacheControl = (headers: Headers, seconds: number) => {
+export const setCacheControl = (headers: Headers, seconds: number, noCache = false) => {
+  if (noCache) {
+    headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    headers.set("Pragma", "no-cache");
+    return;
+  }
   headers.set(
     "Cache-Control",
     `public, max-age=${seconds}, s-maxage=${seconds}, immutable, stale-while-revalidate=${seconds * 7}`,

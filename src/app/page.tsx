@@ -18,8 +18,8 @@ export default function Home() {
     },
   ] as const;
 
-  const metadataParams = ["rpcUrl", "debug=1"] as const;
-  const imageParams = ["raw=1", "svg=1", "w", "h", "q", "rpcUrl", "debug=1", "json=1"] as const;
+  const metadataParams = ["rpcUrl", "refresh=1", "debug=1"] as const;
+  const imageParams = ["raw=1", "svg=1", "w", "h", "q", "rpcUrl", "refresh=1", "debug=1", "json=1"] as const;
 
   return (
     <main className="min-h-screen max-w-2xl mx-auto px-6 py-8 font-mono">
@@ -240,6 +240,9 @@ export default function Home() {
                   <span className="text-foreground">rpcUrl</span>: override the chain RPC URL (optional)
                 </li>
                 <li>
+                  <span className="text-foreground">refresh=1</span>: bypass all caches (LRU + CDN/Edge) and fetch fresh data
+                </li>
+                <li>
                   <span className="text-foreground">debug=1</span>: extra error details (dev only)
                 </li>
               </ul>
@@ -269,6 +272,9 @@ export default function Home() {
                 </li>
                 <li>
                   <span className="text-foreground">rpcUrl</span>: override the chain RPC URL (optional)
+                </li>
+                <li>
+                  <span className="text-foreground">refresh=1</span>: bypass all caches (LRU + CDN/Edge) and fetch fresh data
                 </li>
                 <li>
                   <span className="text-foreground">json=1</span>: return JSON on error (otherwise SVG fallback)

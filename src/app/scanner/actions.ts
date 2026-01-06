@@ -586,8 +586,9 @@ export type NftAuditResult = {
   };
 };
 
-export async function auditNft(chain: string, contract: string, tokenId: string): Promise<NftAuditResult> {
+export async function auditNft(chain: string, contract: string, tokenId: string, options?: { refresh?: boolean }): Promise<NftAuditResult> {
   let metadataResult;
+  const refresh = options?.refresh ?? false;
   
   try {
     metadataResult = await resolveNftMetadata({
@@ -596,6 +597,7 @@ export async function auditNft(chain: string, contract: string, tokenId: string)
       tokenId,
       rpcUrlQuery: null,
       cacheTtlMs: 60 * 1000,
+      skipCache: refresh,
     });
   } catch (e: unknown) {
     const { source, message, isTransient } = classifyError(e);
@@ -768,9 +770,9 @@ export async function auditNft(chain: string, contract: string, tokenId: string)
   };
 }
 
-export async function checkNftStatus(chain: string, contract: string, tokenId: string): Promise<NftStatusResult> {
+export async function checkNftStatus(chain: string, contract: string, tokenId: string, options?: { refresh?: boolean }): Promise<NftStatusResult> {
   // Use the audit function internally for detailed analysis
-  const audit = await auditNft(chain, contract, tokenId);
+  const audit = await auditNft(chain, contract, tokenId, options);
   
   if (!audit.ok) {
     return {

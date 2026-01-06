@@ -7,7 +7,7 @@ import { isAddress } from "viem";
 import { Drawer } from "vaul";
 import { Section } from "@/components/Section";
 import { scanNfts, checkNftStatus } from "./actions";
-import { ArrowLeft, ArrowUpRight, Database, Box, HardDrive, Server, HelpCircle, Pin, CheckCircle2, AlertCircle, RefreshCw, X, Check, AlertTriangle, Loader2, ImageOff, LayoutGrid, List, Play, Square, RotateCcw, Share2 } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Database, Box, HardDrive, Server, HelpCircle, Pin, CheckCircle2, AlertCircle, RefreshCw, X, Check, AlertTriangle, Loader2, ImageOff, LayoutGrid, List, Play, Square, RotateCcw, Share2, Trash2 } from "lucide-react";
 import { toPng } from "html-to-image";
 import QRCode from "qrcode";
 import { SUPPORTED_CHAINS, chainLabel, type SupportedChain } from "@/lib/nft/chain";
@@ -217,15 +217,6 @@ const ipfsPinLabel = (status: IpfsPinStatus | undefined): string => {
   }
 };
 
-const ipfsPinDescription = (status: IpfsPinStatus | undefined): string => {
-  switch (status) {
-    case "pinned": return "Served by a known pinning service. Content should remain available.";
-    case "available": return "Accessible on IPFS gateways but may not be pinned. Could disappear.";
-    case "unavailable": return "Not accessible on checked gateways. May be unpinned and at risk.";
-    default: return "";
-  }
-};
-
 const StatusIcon = ({ status, isTransient, size = "md" }: { status: "ok" | "error" | "unknown"; isTransient?: boolean; size?: "sm" | "md" }) => {
   const sizeClasses = size === "sm" ? "w-8 h-8" : "w-12 h-12";
   const iconSize = size === "sm" ? "w-4 h-4" : "w-6 h-6";
@@ -304,6 +295,7 @@ export default function ScannerPage() {
   const [submittedAddress, setSubmittedAddress] = useState("");
   const [submittedChain, setSubmittedChain] = useState<SupportedChain>("eth");
   const [nfts, setNfts] = useState<NftItem[]>([]);
+  const [scanError, setScanError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanStartedAt, setScanStartedAt] = useState<number | null>(null);
@@ -311,6 +303,7 @@ export default function ScannerPage() {
   const cancelRef = useRef(false);
   const runIdRef = useRef(0);
   const needsAutoScanRef = useRef(false);
+  const forceRefreshRef = useRef(false);
   const [urlParamScan, setUrlParamScan] = useState<{ target: string; chain: SupportedChain } | null>(null);
   const nftsRef = useRef(nfts);
   const didRestoreRef = useRef(false);
@@ -567,9 +560,10 @@ export default function ScannerPage() {
     }
   }, [submittedTarget, submittedAddress, submittedChain, nfts, scanStartedAt, scanEndedAt]);
 
-  const scanOne = useCallback(async (idx: number, opts?: { force?: boolean; runId?: number }) => {
+  const scanOne = useCallback(async (idx: number, opts?: { force?: boolean; runId?: number; refresh?: boolean }) => {
     const runId = opts?.runId ?? runIdRef.current;
     const force = Boolean(opts?.force);
+    const refresh = opts?.refresh ?? forceRefreshRef.current;
 
     // Use ref to get latest nfts state
     const current = nftsRef.current[idx];
@@ -585,7 +579,7 @@ export default function ScannerPage() {
     });
 
     try {
-      const status = await checkNftStatus(current.chain, current.contract, current.tokenId);
+      const status = await checkNftStatus(current.chain, current.contract, current.tokenId, { refresh });
       if (runId !== runIdRef.current || cancelRef.current) return;
 
       setNftsSync((prev) => {
@@ -645,6 +639,10 @@ export default function ScannerPage() {
     cancelRef.current = false;
     runIdRef.current += 1;
     const runId = runIdRef.current;
+    const shouldRefresh = forceRefreshRef.current;
+    // Reset force refresh flag now that we're starting the scan
+    forceRefreshRef.current = false;
+    
     setIsScanning(true);
     if (!scanStartedAt) setScanStartedAt(Date.now());
     setScanEndedAt(null);
@@ -659,7 +657,7 @@ export default function ScannerPage() {
         // Skip if already processed or currently being scanned
         if (!item || item.status === "ok" || item.status === "error" || item.status === "scanning") continue;
         foundPending = true;
-        await scanOne(i, { runId });
+        await scanOne(i, { runId, refresh: shouldRefresh });
       }
     }
 
@@ -687,6 +685,43 @@ export default function ScannerPage() {
     setScanStartedAt(Date.now());
     setScanEndedAt(null);
   }, [submittedAddress, nfts.length, cancelScan]);
+
+  const clearScan = useCallback(() => {
+    // Cancel any ongoing scan
+    cancelScan();
+    
+    // Clear localStorage for this session
+    if (submittedTarget && submittedChain) {
+      try {
+        window.localStorage.removeItem(sessionKey(submittedTarget, submittedChain));
+        // Also clear last session reference if it matches
+        const lastRaw = window.localStorage.getItem(lastSessionKey);
+        if (lastRaw) {
+          const last = JSON.parse(lastRaw);
+          if (last?.target === submittedTarget && last?.chain === submittedChain) {
+            window.localStorage.removeItem(lastSessionKey);
+          }
+        }
+      } catch {
+        // Ignore storage errors
+      }
+    }
+    
+    // Force refresh on next scan (bypass all caches)
+    forceRefreshRef.current = true;
+    
+    // Reset all state
+    setNfts([]);
+    nftsRef.current = [];
+    setSubmittedAddress("");
+    setSubmittedTarget("");
+    setInput("");
+    setScanError(null);
+    setScanStartedAt(null);
+    setScanEndedAt(null);
+    setDrawerOpen(false);
+    setSelectedNftIdx(null);
+  }, [cancelScan, submittedTarget, submittedChain]);
 
   // Share/download report as image
   const shareReport = useCallback(async () => {
@@ -795,8 +830,6 @@ export default function ScannerPage() {
       return false;
     }
   }, []);
-
-  const [scanError, setScanError] = useState<string | null>(null);
 
   const fetchAndScan = useCallback(async (target: string, chain: SupportedChain) => {
     setLoading(true);
@@ -997,6 +1030,15 @@ export default function ScannerPage() {
                       Rescan
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={clearScan}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg text-foreground-faint hover:text-foreground hover:bg-foreground/5 transition-colors"
+                    title="Clear scan and start fresh"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Clear
+                  </button>
                 </div>
 
                 <div className="flex items-center gap-4 text-foreground-muted">
@@ -1198,7 +1240,7 @@ export default function ScannerPage() {
                   {(stats.metadataIpfsUnavailable > 0 || stats.imageIpfsUnavailable > 0) && (
                     <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
                       <div className="flex items-start gap-2">
-                        <AlertTriangle className="w-4 h-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                        <AlertTriangle className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
                         <div>
                           <div className="text-orange-500 font-medium text-sm">
                             {stats.metadataIpfsUnavailable + stats.imageIpfsUnavailable} IPFS assets may be unpinned
@@ -1462,7 +1504,7 @@ export default function ScannerPage() {
           <Drawer.Overlay className="fixed inset-0 bg-black/40 z-40" />
           <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 bg-background flex flex-col rounded-t-2xl max-h-[90vh]">
             <div className="p-4 pb-0">
-              <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-foreground-faint/30 mb-4" />
+              <div className="mx-auto w-12 h-1.5 shrink-0 rounded-full bg-foreground-faint/30 mb-4" />
             </div>
             
             {selectedNft && selectedNftIdx !== null && (

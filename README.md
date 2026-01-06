@@ -8,7 +8,7 @@ Docs: `https://onchainproxy.io`
 
 ## Apps built with OnChainProxy
 
-- **OnChainScanner** (`https://onchainproxy.io/scanner`): Scan a wallet’s NFTs and check which metadata/images are live vs down.
+- **[OnChainScanner](https://onchainproxy.io/scanner)**: Scan a wallet's assets and check which metadata/images are live vs down.
 
 ## Deploy
 
@@ -66,12 +66,12 @@ By default, the image endpoint returns WebP when possible (UI-friendly thumbnail
 - **Metadata**
   - `GET /:chain/:contract/:tokenId`
   - Returns JSON metadata (and the resolved image URL).
-  - Query params: `rpcUrl`, `debug=1`
+  - Query params: `rpcUrl`, `refresh=1`, `debug=1`
 
 - **Image**
   - `GET /:chain/:contract/:tokenId/image`
   - Returns WebP when possible (thumbnail-optimized).
-  - Query params: `raw=1`, `svg=1`, `w`, `h`, `q`, `rpcUrl`, `debug=1`, `json=1`
+  - Query params: `raw=1`, `svg=1`, `w`, `h`, `q`, `rpcUrl`, `refresh=1`, `debug=1`, `json=1`
 
 Cache-friendly responses: `ETag` + `Cache-Control`.
 
@@ -91,6 +91,7 @@ Cache-friendly responses: `ETag` + `Cache-Control`.
 
 - `chain`: one of `eth, base, arb, op, polygon, zksync, linea, scroll, polygon-zkevm`
 - `rpcUrl`: override the chain RPC URL (optional)
+- `refresh=1`: bypass all caches (LRU + CDN/Edge) and fetch fresh data from chain
 - `debug=1`: extra error details (dev only)
 
 **GET /:chain/:contract/:tokenId/image**
@@ -101,6 +102,7 @@ Cache-friendly responses: `ETag` + `Cache-Control`.
 - `w`, `h`: max resize bounds (default 512, min 16, max 2048)
 - `q`: WebP quality (default 70, min 30, max 90)
 - `rpcUrl`: override the chain RPC URL (optional)
+- `refresh=1`: bypass all caches (LRU + CDN/Edge) and fetch fresh data from chain
 - `json=1`: return JSON on error (otherwise SVG fallback)
 - `debug=1`: extra error details (dev only)
 

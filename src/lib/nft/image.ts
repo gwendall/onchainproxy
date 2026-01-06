@@ -40,10 +40,13 @@ const fetchWithTimeout = async (url: string, timeoutMs: number) => {
 export const fetchImageBuffer = async (params: {
   url: string;
   cacheTtlMs: number;
+  skipCache?: boolean;
 }) => {
   const nowMs = Date.now();
-  const cached = imageFetchCache.get(params.url, nowMs);
-  if (cached) return cached;
+  if (!params.skipCache) {
+    const cached = imageFetchCache.get(params.url, nowMs);
+    if (cached) return cached;
+  }
 
   const resp = await fetchWithTimeout(params.url, 15_000);
   if (!resp.ok) throw new Error(`Image fetch failed (${resp.status})`);

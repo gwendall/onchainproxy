@@ -50,6 +50,7 @@ export const GET = async (
     if (!ethers.utils.isAddress(contract)) return jsonError(400, "Invalid contract");
 
     const rpcUrl = request.nextUrl.searchParams.get("rpcUrl");
+    const refresh = request.nextUrl.searchParams.get("refresh") === "1";
     const cacheSeconds = 60 * 60 * 24; // 1 day
     const lruTtlMs = 5 * 60 * 1000; // 5 min per instance
 
@@ -59,21 +60,22 @@ export const GET = async (
       tokenId,
       rpcUrlQuery: rpcUrl,
       cacheTtlMs: lruTtlMs,
+      skipCache: refresh,
     });
 
     const body = Buffer.from(JSON.stringify(result), "utf8");
     const etag = computeWeakEtag(body);
-    if (maybeNotModified(request, etag)) {
+    if (!refresh && maybeNotModified(request, etag)) {
       const headers = new Headers();
       headers.set("ETag", etag);
-      setCacheControl(headers, cacheSeconds);
+      setCacheControl(headers, cacheSeconds, refresh);
       return new Response(null, { status: 304, headers });
     }
 
     const headers = new Headers();
     headers.set("Content-Type", "application/json; charset=utf-8");
     headers.set("ETag", etag);
-    setCacheControl(headers, cacheSeconds);
+    setCacheControl(headers, cacheSeconds, refresh);
     return new Response(body, { status: 200, headers });
   } catch (e) {
     console.error("[metadata] failed", e);
