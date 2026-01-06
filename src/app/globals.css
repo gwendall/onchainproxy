@@ -78,3 +78,17 @@ html { font-size: 16px; }
     --content-leading: 1.55; /* tighter on desktop */
   }
 }
+
+/* Animated gradient for progress bar */
+@keyframes gradient-x {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient-x {
+  animation: gradient-x 2s ease infinite;
+}

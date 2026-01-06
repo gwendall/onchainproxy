@@ -7,7 +7,7 @@ import { isAddress } from "viem";
 import { Drawer } from "vaul";
 import { Section } from "@/components/Section";
 import { scanNfts, checkNftStatus } from "./actions";
-import { ArrowLeft, ArrowUpRight, Database, Box, HardDrive, Server, HelpCircle, Pin, CheckCircle2, AlertCircle, RefreshCw, X, Check, AlertTriangle, Loader2, ImageOff, LayoutGrid, List, Play, Square, RotateCcw, Share2, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Database, Box, HardDrive, Server, HelpCircle, Pin, CheckCircle2, AlertCircle, RefreshCw, X, Check, AlertTriangle, Loader2, ImageOff, LayoutGrid, List, Play, Square, Share2, Trash2 } from "lucide-react";
 import { toPng } from "html-to-image";
 import QRCode from "qrcode";
 import { SUPPORTED_CHAINS, chainLabel, type SupportedChain } from "@/lib/nft/chain";
@@ -298,6 +298,7 @@ export default function ScannerPage() {
   const [scanError, setScanError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const isScanningRef = useRef(false);
   const [scanStartedAt, setScanStartedAt] = useState<number | null>(null);
   const [scanEndedAt, setScanEndedAt] = useState<number | null>(null);
   const cancelRef = useRef(false);
@@ -315,6 +316,8 @@ export default function ScannerPage() {
   const [selectedNftIdx, setSelectedNftIdx] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showErrorsOnly, setShowErrorsOnly] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     if (typeof window === "undefined") return "list";
     const saved = window.localStorage.getItem("onchainproxy:scanner:viewMode");
@@ -634,7 +637,8 @@ export default function ScannerPage() {
 
   const startScan = useCallback(async () => {
     const nftsLength = nftsRef.current.length;
-    if (!submittedAddress || nftsLength === 0 || isScanning) return;
+    // Use ref for synchronous check to avoid stale closure issues
+    if (!submittedAddress || nftsLength === 0 || isScanningRef.current) return;
 
     cancelRef.current = false;
     runIdRef.current += 1;
@@ -643,6 +647,7 @@ export default function ScannerPage() {
     // Reset force refresh flag now that we're starting the scan
     forceRefreshRef.current = false;
     
+    isScanningRef.current = true;
     setIsScanning(true);
     if (!scanStartedAt) setScanStartedAt(Date.now());
     setScanEndedAt(null);
@@ -662,29 +667,22 @@ export default function ScannerPage() {
     }
 
     if (runId === runIdRef.current) {
+      isScanningRef.current = false;
       setIsScanning(false);
       setScanEndedAt(Date.now());
     }
-  }, [submittedAddress, isScanning, scanStartedAt, scanOne]);
+  }, [submittedAddress, scanStartedAt, scanOne]);
 
   const cancelScan = useCallback(() => {
     cancelRef.current = true;
     runIdRef.current += 1;
+    isScanningRef.current = false;
     setIsScanning(false);
   }, []);
 
   const continueScan = useCallback(() => {
     void startScan();
   }, [startScan]);
-
-  const rescanWallet = useCallback(() => {
-    if (!submittedAddress || nfts.length === 0) return;
-    cancelScan();
-    needsAutoScanRef.current = true;
-    setNfts((prev) => prev.map(resetNftScan));
-    setScanStartedAt(Date.now());
-    setScanEndedAt(null);
-  }, [submittedAddress, nfts.length, cancelScan]);
 
   const clearScan = useCallback(() => {
     // Cancel any ongoing scan
@@ -924,7 +922,8 @@ export default function ScannerPage() {
               <select
                 value={selectedChain}
                 onChange={(e) => setSelectedChain(e.target.value as SupportedChain)}
-                className="col-start-1 row-start-1 pl-4 pr-8 py-2.5 bg-foreground/10 border border-transparent rounded-lg focus:border-foreground focus:outline-none transition-colors cursor-pointer appearance-none"
+                disabled={isScanning || loading}
+                className="col-start-1 row-start-1 pl-4 pr-8 py-2.5 bg-foreground/10 border border-transparent rounded-lg focus:border-foreground focus:outline-none transition-colors cursor-pointer appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {SUPPORTED_CHAINS.map((c) => (
                   <option key={c} value={c}>
@@ -944,38 +943,105 @@ export default function ScannerPage() {
               </div>
             </div>
             <input
+              ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => {
+                // If a scan is paused (has pending items), ask for confirmation before allowing edit
+                if (hasPending && !showClearConfirm) {
+                  setShowClearConfirm(true);
+                  return;
+                }
                 setInput(e.target.value);
                 if (scanError) setScanError(null);
+              }}
+              onFocus={() => {
+                // Also trigger confirmation on focus if there's a paused scan
+                if (hasPending && !showClearConfirm) {
+                  setShowClearConfirm(true);
+                }
               }}
               placeholder="0x... or vitalik.eth"
               spellCheck={false}
               autoCapitalize="none"
               autoCorrect="off"
-              className="flex-1 px-4 py-2.5 bg-foreground/10 border border-transparent rounded-lg focus:border-foreground focus:outline-none transition-colors placeholder:text-foreground-faint/50"
+              disabled={isScanning || loading}
+              className="flex-1 px-4 py-2.5 bg-foreground/10 border border-transparent rounded-lg focus:border-foreground focus:outline-none transition-colors placeholder:text-foreground-faint/50 disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className="w-full sm:w-auto px-6 py-2.5 bg-foreground text-background font-bold rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity inline-flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Fetching...
-                </>
-              ) : isScanning ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Scanning...
-                </>
-              ) : (
-                "Scan"
-              )}
-            </button>
+            {loading ? (
+              <button
+                type="button"
+                disabled
+                className="w-full sm:w-auto px-6 py-2.5 bg-foreground text-background font-bold rounded-lg disabled:opacity-50 transition-opacity inline-flex items-center justify-center gap-2"
+              >
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Fetching...
+              </button>
+            ) : isScanning ? (
+              <button
+                type="button"
+                onClick={cancelScan}
+                className="w-full sm:w-auto px-6 py-2.5 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition-colors inline-flex items-center justify-center gap-2"
+              >
+                <Square className="w-4 h-4" />
+                Cancel
+              </button>
+            ) : hasPending ? (
+              <button
+                type="button"
+                onClick={continueScan}
+                className="w-full sm:w-auto px-6 py-2.5 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600 transition-colors inline-flex items-center justify-center gap-2"
+              >
+                <Play className="w-4 h-4" />
+                Continue
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!canSubmit}
+                className="w-full sm:w-auto px-6 py-2.5 bg-foreground text-background font-bold rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity inline-flex items-center justify-center gap-2"
+              >
+                Scan
+              </button>
+            )}
           </form>
+          {showClearConfirm ? (
+            <div className="mt-3 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-yellow-500 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <div className="text-yellow-500 font-medium">A scan is in progress</div>
+                  <div className="text-yellow-500/80 text-sm mt-1">
+                    Do you want to cancel the current scan to start a new one?
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearScan();
+                        setShowClearConfirm(false);
+                        // Focus the input after clearing
+                        setTimeout(() => inputRef.current?.focus(), 0);
+                      }}
+                      className="px-4 py-2 text-sm font-medium rounded-lg bg-yellow-500 text-black hover:bg-yellow-400 transition-colors"
+                    >
+                      Yes, start new scan
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowClearConfirm(false);
+                        inputRef.current?.blur();
+                      }}
+                      className="px-4 py-2 text-sm font-medium rounded-lg bg-foreground/10 text-foreground hover:bg-foreground/20 transition-colors"
+                    >
+                      No, continue current scan
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
           {!isChainSupportedForWallet ? (
             <div className="mt-2 text-foreground-faint">
               Wallet asset listing is not supported on <span className="text-foreground">{selectedChain}</span> yet.
@@ -983,7 +1049,7 @@ export default function ScannerPage() {
           ) : null}
           {inputTrimmed.length > 0 && !isValidTarget(inputTrimmed) ? (
             <div className="mt-2 text-foreground-faint">
-              Please enter a valid Ethereum address (0x + 40 hex chars) or an ENS name (e.g. vitalik.eth).
+              Please enter a valid Ethereum address or an ENS name.
             </div>
           ) : null}
           {scanError ? (
@@ -993,53 +1059,29 @@ export default function ScannerPage() {
           ) : null}
           {submittedAddress && nfts.length > 0 ? (
             <div className="mt-7 space-y-3">
-              <div className="h-1 w-full bg-foreground-faint/20">
+              <div className="h-2 w-full bg-foreground-faint/20 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-foreground"
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    isScanning 
+                      ? "bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-[length:200%_100%] animate-gradient-x" 
+                      : stats.progressPct >= 100 
+                        ? "bg-green-500" 
+                        : "bg-foreground"
+                  }`}
                   style={{ width: `${Math.min(100, Math.max(0, stats.progressPct))}%` }}
                 />
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  {isScanning ? (
-                    <button 
-                      type="button" 
-                      onClick={cancelScan} 
-                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
-                    >
-                      <Square className="w-3.5 h-3.5" />
-                      Cancel
-                    </button>
-                  ) : hasPending ? (
-                    <button 
-                      type="button" 
-                      onClick={continueScan} 
-                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors"
-                    >
-                      <Play className="w-3.5 h-3.5" />
-                      Continue
-                    </button>
-                  ) : stats.scanned === stats.total && stats.total > 0 ? (
-                    <button
-                      type="button"
-                      onClick={rescanWallet}
-                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-foreground/10 text-foreground hover:bg-foreground/15 transition-colors"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      Rescan
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={clearScan}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg text-foreground-faint hover:text-foreground hover:bg-foreground/5 transition-colors"
-                    title="Clear scan and start fresh"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Clear
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={clearScan}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg text-foreground-faint hover:text-foreground hover:bg-foreground/5 transition-colors"
+                  title="Clear scan and start fresh"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Clear
+                </button>
 
                 <div className="flex items-center gap-4 text-foreground-muted">
                   {isScanning && eta ? (
@@ -1152,7 +1194,7 @@ export default function ScannerPage() {
               {stats.scanned > 0 && (
                 <div className="p-5 bg-foreground/5 space-y-4">
                   {/* Status Breakdown */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <div className="text-foreground-faint text-xs uppercase tracking-wider mb-2">Metadata</div>
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
